@@ -1,0 +1,383 @@
+diff --git a/fs/chunkedreader/budget.go b/fs/chunkedreader/budget.go
+new file mode 100644
+index 0000000..4f0f96e
+--- /dev/null
++++ b/fs/chunkedreader/budget.go
+@@ -0,0 +1,81 @@
++package chunkedreader
++
++import "sync"
++
++// initialStreams is how many streams a parallel reader starts with after
++// an open or a seek when the streams are shared, so the first bytes don't
++// compete with a long read ahead.
++const initialStreams = 4
++
++// streamBudget shares a number of simultaneous downloads between all the
++// parallel chunked readers of the process.
++//
++// Some providers refuse more simultaneous downloads per account than a
++// single reader with many streams would open, so the readers downloading
++// at the same time split the budget evenly.
++type streamBudget struct {
++	mu      sync.Mutex
++	total   int               // downloads allowed at once, 0 for no limit
++	active  int               // downloads in progress
++	readers map[*parallel]int // downloads in progress per reader
++}
++
++var budget = &streamBudget{readers: map[*parallel]int{}}
++
++// SetStreamsTotal limits the simultaneous downloads of all the parallel
++// chunked readers to n, or removes the limit if n <= 0.
++//
++// With a limit, each reader starts with up to 4 streams after an open or
++// a seek and doubles them while its reads wait on the network, up to its
++// streams setting and its share of n.
++func SetStreamsTotal(n int) {
++	budget.mu.Lock()
++	defer budget.mu.Unlock()
++	budget.total = max(0, n)
++}
++
++// shared reports whether the streams are shared between readers.
++func (b *streamBudget) shared() bool {
++	b.mu.Lock()
++	defer b.mu.Unlock()
++	return b.total > 0
++}
++
++// acquire reports whether cr, which has queued streams already, may start
++// another download, and whether that download must be released.
++//
++// A reader with nothing queued always gets a stream so it can't starve.
++func (b *streamBudget) acquire(cr *parallel, queued int) (ok, counted bool) {
++	b.mu.Lock()
++	defer b.mu.Unlock()
++	if b.total <= 0 {
++		return true, false
++	}
++	if queued >= cr.want {
++		return false, false
++	}
++	mine := b.readers[cr]
++	downloading := len(b.readers)
++	if mine == 0 {
++		downloading++
++	}
++	share := max(1, b.total/downloading)
++	if queued > 0 && (mine >= share || b.active >= b.total) {
++		return false, false
++	}
++	b.active++
++	b.readers[cr] = mine + 1
++	return true, true
++}
++
++// release ends a download started with acquire.
++func (b *streamBudget) release(cr *parallel) {
++	b.mu.Lock()
++	defer b.mu.Unlock()
++	b.active--
++	if n := b.readers[cr] - 1; n > 0 {
++		b.readers[cr] = n
++	} else {
++		delete(b.readers, cr)
++	}
++}
+diff --git a/fs/chunkedreader/budget_test.go b/fs/chunkedreader/budget_test.go
+new file mode 100644
+index 0000000..b91d154
+--- /dev/null
++++ b/fs/chunkedreader/budget_test.go
+@@ -0,0 +1,96 @@
++package chunkedreader
++
++import (
++	"context"
++	"io"
++	"testing"
++
++	"github.com/rclone/rclone/fstest/mockobject"
++	"github.com/rclone/rclone/lib/multipart"
++	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++)
++
++func TestStreamBudgetShares(t *testing.T) {
++	b := &streamBudget{total: 4, readers: map[*parallel]int{}}
++	first, second := &parallel{want: 8}, &parallel{want: 8}
++
++	// Alone, a reader gets the whole budget but no more
++	for queued := range 4 {
++		ok, counted := b.acquire(first, queued)
++		require.True(t, ok)
++		require.True(t, counted)
++	}
++	ok, _ := b.acquire(first, 4)
++	assert.False(t, ok)
++
++	// A reader with nothing queued always gets a stream, but no second one over budget
++	ok, _ = b.acquire(second, 0)
++	assert.True(t, ok)
++	ok, _ = b.acquire(second, 1)
++	assert.False(t, ok)
++
++	// Once the first reader's downloads end, the second gets half the budget
++	b.release(first)
++	b.release(first)
++	b.release(first)
++	ok, _ = b.acquire(second, 1)
++	assert.True(t, ok)
++	ok, _ = b.acquire(second, 2)
++	assert.False(t, ok)
++
++	// The queue never goes past what the reader wants
++	ok, _ = b.acquire(first, 8)
++	assert.False(t, ok)
++
++	b.release(first)
++	b.release(second)
++	b.release(second)
++	assert.Equal(t, 0, b.active)
++	assert.Empty(t, b.readers)
++}
++
++func TestStreamBudgetUnlimited(t *testing.T) {
++	b := &streamBudget{readers: map[*parallel]int{}}
++	ok, counted := b.acquire(&parallel{want: 1}, 10)
++	assert.True(t, ok)
++	assert.False(t, counted)
++}
++
++func TestParallelSharedStreams(t *testing.T) {
++	SetStreamsTotal(3)
++	defer SetStreamsTotal(0)
++
++	content := makeContent(t, 1024)
++	for _, mode := range mockobject.SeekModes {
++		t.Run(mode.String(), testRead(content, mode, 8))
++	}
++
++	// Two readers reading at once return their content and give back every download
++	ctx := context.Background()
++	const size = 20*multipart.BufferSize + 255
++	content = makeContent(t, size)
++	readers := []ChunkedReader{}
++	for range 2 {
++		o := mockobject.New("test.bin").WithContent(content, mockobject.SeekModeNone)
++		readers = append(readers, New(ctx, o, multipart.BufferSize, 0, 8))
++	}
++	done := make(chan []byte, len(readers))
++	for _, cr := range readers {
++		go func() {
++			got, err := io.ReadAll(cr)
++			assert.NoError(t, err)
++			done <- got
++		}()
++	}
++	for range readers {
++		assert.Equal(t, content, <-done)
++	}
++	for _, cr := range readers {
++		require.NoError(t, cr.Close())
++	}
++	budget.mu.Lock()
++	defer budget.mu.Unlock()
++	assert.Equal(t, 0, budget.active)
++	assert.Empty(t, budget.readers)
++}
+diff --git a/fs/chunkedreader/parallel.go b/fs/chunkedreader/parallel.go
+index a76d891..d8456f5 100644
+--- a/fs/chunkedreader/parallel.go
++++ b/fs/chunkedreader/parallel.go
+@@ -25,6 +25,7 @@ type parallel struct {
+ 	offset    int64      // offset the read file pointer is at
+ 	chunkSize int64      // length of the chunks to read
+ 	nstreams  int        // number of streams to use
++	want      int        // number of streams to keep queued, at most nstreams
+ 	streams   []*stream  // the opened streams in offset order - the current one is first
+ 	closed    bool       // has Close been called?
+ }
+@@ -41,22 +42,25 @@ type stream struct {
+ 	rw        *pool.RW        // buffer for read
+ 	err       chan error      // error returned from the read
+ 	name      string          // name of this stream for debugging
++	counted   bool            // download is counted in the budget
++	waited    bool            // a read had to wait for the data
+ }
+ 
+ // Start a stream reading (offset, offset+size)
+-func (cr *parallel) newStream(ctx context.Context, offset, size int64) (s *stream, err error) {
++func (cr *parallel) newStream(ctx context.Context, offset, size int64, counted bool) (s *stream, err error) {
+ 	ctx, cancel := context.WithCancel(ctx)
+ 
+ 	// Create the stream
+ 	rw := multipart.NewRW()
+ 	s = &stream{
+-		cr:     cr,
+-		ctx:    ctx,
+-		cancel: cancel,
+-		offset: offset,
+-		size:   size,
+-		rw:     rw,
+-		err:    make(chan error, 1),
++		cr:      cr,
++		ctx:     ctx,
++		cancel:  cancel,
++		offset:  offset,
++		size:    size,
++		rw:      rw,
++		err:     make(chan error, 1),
++		counted: counted,
+ 	}
+ 	s.name = fmt.Sprintf("stream(%d,%d,%p)", s.offset, s.size, s)
+ 
+@@ -69,6 +73,9 @@ func (cr *parallel) newStream(ctx context.Context, offset, size int64) (s *strea
+ 
+ // read the file into the buffer
+ func (s *stream) readFrom(ctx context.Context) {
++	if s.counted {
++		defer budget.release(s.cr)
++	}
+ 	// Open the object at the correct range
+ 	fs.Debugf(s.cr.o, "%s: open", s.name)
+ 	rc, err := operations.Open(ctx, s.cr.o,
+@@ -117,6 +124,7 @@ func (s *stream) read(p []byte) (n int, err error) {
+ 			break
+ 		}
+ 		// Wait for a write to happen to read more
++		s.waited = true
+ 		s.rw.WaitWrite(s.ctx)
+ 	}
+ 	return n, nil
+@@ -167,13 +175,39 @@ func newParallel(ctx context.Context, o fs.Object, chunkSize int64, streams int)
+ 
+ 	fs.Debugf(o, "newParallel chunkSize=%d, streams=%d", chunkSize, streams)
+ 
+-	return &parallel{
++	cr := &parallel{
+ 		ctx:       ctx,
+ 		o:         o,
+ 		offset:    0,
+ 		chunkSize: newChunkSize,
+ 		nstreams:  streams,
+ 	}
++	cr.want = cr.startStreams()
++	return cr
++}
++
++// startStreams returns how many streams to queue after an open or a seek.
++func (cr *parallel) startStreams() int {
++	if budget.shared() {
++		return min(cr.nstreams, initialStreams)
++	}
++	return cr.nstreams
++}
++
++// _adapt doubles the streams after a chunk the reader had to wait for, as
++// the network is behind, and drops one after a chunk that was ready, so a
++// slow reader doesn't hold memory and downloads it doesn't need.
++//
++// Call with the lock held
++func (cr *parallel) _adapt(s *stream) {
++	if !budget.shared() {
++		return
++	}
++	if s.waited {
++		cr.want = min(2*cr.want, cr.nstreams)
++	} else {
++		cr.want = max(cr.want-1, cr.startStreams())
++	}
+ }
+ 
+ // _open starts the file transferring at offset
+@@ -199,7 +233,11 @@ func (cr *parallel) _open() (err error) {
+ 			newEndStream = cr.endStream + chunkSize
+ 		}
+ 
+-		s, err := cr.newStream(cr.ctx, cr.endStream, chunkSize)
++		ok, counted := budget.acquire(cr, len(cr.streams))
++		if !ok {
++			break
++		}
++		s, err := cr.newStream(cr.ctx, cr.endStream, chunkSize, counted)
+ 		if err != nil {
+ 			return err
+ 		}
+@@ -269,6 +307,7 @@ func (cr *parallel) Read(p []byte) (n int, err error) {
+ 		n += nn
+ 		cr.offset += int64(nn)
+ 		if err == io.EOF {
++			cr._adapt(stream)
+ 			err = cr._popStream()
+ 			if err != nil {
+ 				break
+@@ -343,6 +382,7 @@ func (cr *parallel) Seek(offset int64, whence int) (int64, error) {
+ 	if len(cr.streams) == 0 {
+ 		fs.Debugf(cr.o, "parallel chunked reader: no streams remain")
+ 		cr.endStream = cr.offset
++		cr.want = cr.startStreams()
+ 		return cr.offset, nil
+ 	}
+ 
+@@ -354,6 +394,7 @@ func (cr *parallel) Seek(offset int64, whence int) (int64, error) {
+ 		_ = cr._popStreams()
+ 		fs.Debugf(cr.o, "parallel chunked reader: new offset is before current stream - ditch all")
+ 		cr.endStream = cr.offset
++		cr.want = cr.startStreams()
+ 		return cr.offset, nil
+ 	}
+ 
+diff --git a/vfs/vfs.go b/vfs/vfs.go
+index 6c0cb7d..13cd1fc 100644
+--- a/vfs/vfs.go
++++ b/vfs/vfs.go
+@@ -38,6 +38,7 @@ import (
+ 	"github.com/go-git/go-billy/v5"
+ 	"github.com/rclone/rclone/fs"
+ 	"github.com/rclone/rclone/fs/cache"
++	"github.com/rclone/rclone/fs/chunkedreader"
+ 	"github.com/rclone/rclone/fs/filter"
+ 	"github.com/rclone/rclone/fs/log"
+ 	"github.com/rclone/rclone/fs/rc"
+@@ -228,6 +229,9 @@ func New(ctx context.Context, f fs.Fs, opt *vfscommon.Options) *VFS {
+ 
+ 	// Fill out anything else
+ 	vfs.Opt.Init(ctx)
++	if vfs.Opt.ChunkStreamsTotal > 0 {
++		chunkedreader.SetStreamsTotal(vfs.Opt.ChunkStreamsTotal)
++	}
+ 
+ 	// Find a VFS with the same name and options and return it if possible
+ 	activeMu.Lock()
+diff --git a/vfs/vfscommon/options.go b/vfs/vfscommon/options.go
+index 927fff6..720b9eb 100644
+--- a/vfs/vfscommon/options.go
++++ b/vfs/vfscommon/options.go
+@@ -90,6 +90,11 @@ var OptionsInfo = fs.Options{{
+ 	Default: 0,
+ 	Help:    "The number of parallel streams to read at once",
+ 	Groups:  "VFS",
++}, {
++	Name:    "vfs_read_chunk_streams_total",
++	Default: 0,
++	Help:    "The number of parallel streams shared by all open files, 0 for no limit",
++	Groups:  "VFS",
+ }, {
+ 	Name:    "dir_perms",
+ 	Default: FileMode(0777),
+@@ -197,9 +202,10 @@ type Options struct {
+ 	DirPerms           FileMode      `config:"dir_perms"`
+ 	FilePerms          FileMode      `config:"file_perms"`
+ 	LinkPerms          FileMode      `config:"link_perms"`
+-	ChunkSize          fs.SizeSuffix `config:"vfs_read_chunk_size"`       // if > 0 read files in chunks
+-	ChunkSizeLimit     fs.SizeSuffix `config:"vfs_read_chunk_size_limit"` // if > ChunkSize double the chunk size after each chunk until reached
+-	ChunkStreams       int           `config:"vfs_read_chunk_streams"`    // Number of download streams to use
++	ChunkSize          fs.SizeSuffix `config:"vfs_read_chunk_size"`          // if > 0 read files in chunks
++	ChunkSizeLimit     fs.SizeSuffix `config:"vfs_read_chunk_size_limit"`    // if > ChunkSize double the chunk size after each chunk until reached
++	ChunkStreams       int           `config:"vfs_read_chunk_streams"`       // Number of download streams to use
++	ChunkStreamsTotal  int           `config:"vfs_read_chunk_streams_total"` // Number of download streams shared by all files
+ 	CacheMode          CacheMode     `config:"vfs_cache_mode"`
+ 	CacheMaxAge        fs.Duration   `config:"vfs_cache_max_age"`
+ 	CacheMaxSize       fs.SizeSuffix `config:"vfs_cache_max_size"`

@@ -1,0 +1,93 @@
+diff --git a/fs/chunkedreader/budget_test.go b/fs/chunkedreader/budget_test.go
+index b91d154..1c6a3b8 100644
+--- a/fs/chunkedreader/budget_test.go
++++ b/fs/chunkedreader/budget_test.go
+@@ -94,3 +94,22 @@ func TestParallelSharedStreams(t *testing.T) {
+ 	assert.Equal(t, 0, budget.active)
+ 	assert.Empty(t, budget.readers)
+ }
++
++func TestParallelCountsDownloads(t *testing.T) {
++	ctx := context.Background()
++	const size = 5*multipart.BufferSize + 255
++	content := makeContent(t, size)
++	o := mockobject.New("test.bin").WithContent(content, mockobject.SeekModeNone)
++
++	before := downloaded.Load()
++	cr := New(ctx, o, multipart.BufferSize, 0, 3)
++	got, err := io.ReadAll(cr)
++	require.NoError(t, err)
++	require.NoError(t, cr.Close())
++	assert.Equal(t, content, got)
++	assert.Equal(t, int64(size), downloaded.Load()-before)
++
++	out, err := rcDownloaded(ctx, nil)
++	require.NoError(t, err)
++	assert.Equal(t, downloaded.Load(), out["bytes"])
++}
+diff --git a/fs/chunkedreader/downloaded.go b/fs/chunkedreader/downloaded.go
+new file mode 100644
+index 0000000..cda2b41
+--- /dev/null
++++ b/fs/chunkedreader/downloaded.go
+@@ -0,0 +1,47 @@
++package chunkedreader
++
++import (
++	"context"
++	"io"
++	"sync/atomic"
++
++	"github.com/rclone/rclone/fs/rc"
++)
++
++// downloaded counts the bytes the parallel readers have received from
++// the remote, read ahead included.
++var downloaded atomic.Int64
++
++// countingReader adds what it reads to downloaded.
++type countingReader struct{ io.Reader }
++
++func (r countingReader) Read(p []byte) (n int, err error) {
++	n, err = r.Reader.Read(p)
++	downloaded.Add(int64(n))
++	return n, err
++}
++
++func init() {
++	rc.Add(rc.Call{
++		Path:  "core/downloaded",
++		Fn:    rcDownloaded,
++		Title: "Returns the bytes downloaded by the parallel chunked readers.",
++		Help: `
++This counts what the parallel chunked readers (--vfs-read-chunk-streams)
++have received from the remote, read ahead included, so it follows the
++network rather than what the reading programs have consumed so far.
++
++Returns the following values:
++
++` + "```" + `
++{
++	"bytes": bytes received since rclone started
++}
++` + "```" + `
++`,
++	})
++}
++
++func rcDownloaded(ctx context.Context, in rc.Params) (rc.Params, error) {
++	return rc.Params{"bytes": downloaded.Load()}, nil
++}
+diff --git a/fs/chunkedreader/parallel.go b/fs/chunkedreader/parallel.go
+index d8456f5..3327cea 100644
+--- a/fs/chunkedreader/parallel.go
++++ b/fs/chunkedreader/parallel.go
+@@ -88,7 +88,7 @@ func (s *stream) readFrom(ctx context.Context) {
+ 	s.rc = rc
+ 
+ 	fs.Debugf(s.cr.o, "%s: readfrom started", s.name)
+-	_, err = s.rw.ReadFrom(s.rc)
++	_, err = s.rw.ReadFrom(countingReader{s.rc})
+ 	fs.Debugf(s.cr.o, "%s: readfrom finished (%d bytes): %v", s.name, s.rw.Size(), err)
+ 	s.err <- err
+ }

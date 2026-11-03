@@ -1,0 +1,13 @@
+# Xcode and engine builds
+build/
+DerivedData/
+*.xcresult
+xcuserdata/
+
+# rclone sources, fetched by scripts/build-rclone.sh
+rclone/
+
+.DS_Store
+
+# Local tooling
+.claude/
