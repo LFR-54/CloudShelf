@@ -1,0 +1,50 @@
+diff --git a/cmd/cmount/fs.go b/cmd/cmount/fs.go
+index d7b16ed..c425529 100644
+--- a/cmd/cmount/fs.go
++++ b/cmd/cmount/fs.go
+@@ -553,10 +553,17 @@ func shouldIgnoreAppleXattr(opt *mountlib.Options) bool {
+ 	return false
+ }
+ 
++// discardXattrs reports whether extended attributes are accepted and dropped. On macOS a refused attribute
++// makes the kernel keep it in a ._ file, which noappledouble forbids, so every copy carrying attributes
++// (downloaded files, Finder tags) fails with "Operation not permitted". The remote cannot keep them anyway.
++func discardXattrs(opt *mountlib.Options) bool {
++	return runtime.GOOS == "darwin" && opt.NoAppleDouble
++}
++
+ // Setxattr sets extended attributes.
+ func (fsys *FS) Setxattr(path string, name string, value []byte, flags int) (errc int) {
+ 	defer log.Trace(path, "name=%q, value=%q, flags=%d", name, value, flags)("errc=%d", &errc)
+-	if shouldIgnoreAppleXattr(fsys.opt) && strings.HasPrefix(name, "com.apple.") {
++	if discardXattrs(fsys.opt) || shouldIgnoreAppleXattr(fsys.opt) && strings.HasPrefix(name, "com.apple.") {
+ 		return 0
+ 	}
+ 	return -fuse.ENOSYS
+@@ -565,7 +572,7 @@ func (fsys *FS) Setxattr(path string, name string, value []byte, flags int) (err
+ // Getxattr gets extended attributes.
+ func (fsys *FS) Getxattr(path string, name string) (errc int, value []byte) {
+ 	defer log.Trace(path, "name=%q", name)("errc=%d, value=%q", &errc, &value)
+-	if shouldIgnoreAppleXattr(fsys.opt) && strings.HasPrefix(name, "com.apple.") {
++	if discardXattrs(fsys.opt) || shouldIgnoreAppleXattr(fsys.opt) && strings.HasPrefix(name, "com.apple.") {
+ 		return -fuse.ENOATTR, nil
+ 	}
+ 	return -fuse.ENOSYS, nil
+@@ -574,7 +581,7 @@ func (fsys *FS) Getxattr(path string, name string) (errc int, value []byte) {
+ // Removexattr removes extended attributes.
+ func (fsys *FS) Removexattr(path string, name string) (errc int) {
+ 	defer log.Trace(path, "name=%q", name)("errc=%d", &errc)
+-	if shouldIgnoreAppleXattr(fsys.opt) && strings.HasPrefix(name, "com.apple.") {
++	if discardXattrs(fsys.opt) || shouldIgnoreAppleXattr(fsys.opt) && strings.HasPrefix(name, "com.apple.") {
+ 		return 0
+ 	}
+ 	return -fuse.ENOSYS
+@@ -583,7 +590,7 @@ func (fsys *FS) Removexattr(path string, name string) (errc int) {
+ // Listxattr lists extended attributes.
+ func (fsys *FS) Listxattr(path string, fill func(name string) bool) (errc int) {
+ 	defer log.Trace(path, "fill=%p", fill)("errc=%d", &errc)
+-	if shouldIgnoreAppleXattr(fsys.opt) {
++	if discardXattrs(fsys.opt) || shouldIgnoreAppleXattr(fsys.opt) {
+ 		return 0
+ 	}
+ 	return -fuse.ENOSYS

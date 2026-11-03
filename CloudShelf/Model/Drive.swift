@@ -31,7 +31,7 @@ enum MountMethod: String, Codable, CaseIterable {
         case .macFUSE: MacFUSE.version == nil
             ? "macFUSE n'est pas installé sur ce Mac."
             : "Extension noyau. Les fichiers lus ne sont pas copiés sur le disque, sauf en profil Documents."
-        case .nfs: "Client NFS de macOS, aucune installation. Les fichiers lus sont copiés dans le cache."
+        case .nfs: "Client NFS de macOS, aucune installation. Les fichiers lus sont copiés dans le cache. En écriture, un fichier téléchargé ou tagué ne peut pas être copié dessus : préférez macFUSE."
         }
     }
 
