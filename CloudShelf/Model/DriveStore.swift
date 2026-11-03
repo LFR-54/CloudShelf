@@ -186,6 +186,8 @@ final class DriveStore {
         drive.state = .mounting
         drive.notice = nil
         do {
+            // A mount point left by a process that did not exit cleanly stays busy; a new directory does not.
+            removeMountPoint(drive)
             try FileManager.default.createDirectory(at: drive.mountPoint, withIntermediateDirectories: true)
             try FileManager.default.createDirectory(at: drive.logFile.deletingLastPathComponent(), withIntermediateDirectories: true)
             let session = try MountSession(rclone: rclone, command: drive.settings.method == .macFUSE ? "mount" : "nfsmount",
@@ -269,15 +271,19 @@ final class DriveStore {
             : "Le serveur tarde à répondre. rclone réessaie, ce qui peut prendre deux minutes."
     }
 
+    /// Removes the mount point folder unless something is mounted on it or it holds files.
+    private func removeMountPoint(_ drive: Drive) {
+        guard !Mounts.isMounted(drive.mountPoint) else { return }
+        // The Finder drops a .DS_Store in the folder once the volume is gone; rmdir removes nothing else.
+        try? FileManager.default.removeItem(at: drive.mountPoint.appending(path: ".DS_Store"))
+        rmdir(drive.mountPoint.path)
+    }
+
     /// The session is released only once its mount point is clean, so a new mount cannot race the cleanup.
     private func sessionEnded(_ drive: Drive, status: Int32) async {
         // A process that died leaves a dead NFS mount behind, which stalls the Finder.
-        if Mounts.isMounted(drive.mountPoint) { await Mounts.forceUnmount(drive.mountPoint) }
-        if !Mounts.isMounted(drive.mountPoint) {
-            // The Finder drops a .DS_Store in the folder once the volume is gone; rmdir removes nothing else.
-            try? FileManager.default.removeItem(at: drive.mountPoint.appending(path: ".DS_Store"))
-            rmdir(drive.mountPoint.path)
-        }
+        if Mounts.isMounted(drive.mountPoint) { await Mounts.unmount(drive.mountPoint, force: true) }
+        removeMountPoint(drive)
         sessions[drive.id] = nil
         drive.readSpeed = 0
         drive.writeSpeed = 0

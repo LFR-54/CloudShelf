@@ -7,6 +7,7 @@ final class MountSession {
     var onExit: ((Int32) -> Void)?
 
     private let process = Process()
+    private let usesFUSE: Bool
     private let control: RemoteControl
     private var lastSample: (bytes: Int64, received: Int64?, time: ContinuousClock.Instant)?
     private var uploads: [String: Int64] = [:]
@@ -14,6 +15,7 @@ final class MountSession {
     /// `command` is `nfsmount`, or `mount` for macFUSE.
     init(rclone: Rclone, command: String, remote: String, volumeName: String, mountPoint: URL, options: [String], logFile: URL) throws {
         self.mountPoint = mountPoint
+        usesFUSE = command == "mount"
         control = try RemoteControl()
         process.executableURL = rclone.executable
         process.arguments = [command, remote, mountPoint.path,
@@ -33,13 +35,21 @@ final class MountSession {
     var isRunning: Bool { process.isRunning }
 
     /// Asks rclone to unmount and exit.
+    ///
+    /// A macFUSE volume is unmounted from the system side, after which rclone exits by itself. On a signal, rclone
+    /// forces the unmount from inside its own process, which can leave that process stuck in the kernel as it exits,
+    /// and its mount point busy until restart. The signal remains for a volume that refuses to unmount.
     func stop() {
-        if process.isRunning { process.interrupt() }
+        guard process.isRunning else { return }
+        guard usesFUSE else { return process.interrupt() }
+        Task {
+            if await !Mounts.unmount(mountPoint), process.isRunning { process.interrupt() }
+        }
     }
 
     /// Unmounts from the system side when rclone does not answer, then ends the process.
     func forceStop() async {
-        await Mounts.forceUnmount(mountPoint)
+        await Mounts.unmount(mountPoint, force: true)
         if process.isRunning { process.terminate() }
     }
 
@@ -92,18 +102,20 @@ enum Mounts {
         }
     }
 
-    /// `umount -f`, awaited without blocking: a dead NFS server can take seconds to answer.
-    static func forceUnmount(_ url: URL) async {
+    /// `umount`, awaited without blocking: a dead NFS server can take seconds to answer. Without `force`, it fails
+    /// while a file on the volume is open. Returns whether the volume was unmounted.
+    @discardableResult
+    static func unmount(_ url: URL, force: Bool = false) async -> Bool {
         await withCheckedContinuation { continuation in
             let umount = Process()
             umount.executableURL = URL(filePath: "/sbin/umount")
-            umount.arguments = ["-f", url.path]
+            umount.arguments = (force ? ["-f"] : []) + [url.path]
             umount.standardError = FileHandle.nullDevice
-            umount.terminationHandler = { _ in continuation.resume() }
+            umount.terminationHandler = { continuation.resume(returning: $0.terminationStatus == 0) }
             do {
                 try umount.run()
             } catch {
-                continuation.resume()
+                continuation.resume(returning: false)
             }
         }
     }
