@@ -238,6 +238,12 @@ enum MountOptions {
         if drive.provider.type == "dropbox", !settings.readOnly {
             flags += ["--dropbox-chunk-size", "128M", "--transfers", "16"]
         }
+        // Measured on Google Drive with a 76 MB/s uplink: 64 MiB chunks sent one file at 32 MB/s against 18.5 with
+        // the 8 MiB default (128 MiB did no better), and 8 files at once reached 73 MB/s against 45 for 4 files with
+        // the defaults. Up to 512 MiB of memory with 8 large files in flight.
+        if drive.provider.type == "drive", !settings.readOnly {
+            flags += ["--drive-chunk-size", "64M", "--transfers", "8"]
+        }
         return flags + extraOptions(settings.extraOptions)
     }
 

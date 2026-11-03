@@ -50,6 +50,7 @@ struct Release: Identifiable {
             .improved: [
                 Note(text: "Avec macFUSE, les fichiers lus ne passent plus par le disque : regarder une vidéo n'occupe aucun cache", bold: true),
                 Note(text: "Envois vers Dropbox par blocs de 128 Mo, 16 fichiers à la fois : 1 Go en 31 s au lieu de 56"),
+                Note(text: "Envois vers Google Drive par blocs de 64 Mo, 8 fichiers à la fois : 73 Mo/s au lieu de 45"),
                 Note(text: "Débit affiché tel qu'il passe sur le réseau, et non quand les apps lisent les données"),
                 Note(text: "Fenêtre utilisable dès 840 × 580 points"),
                 Note(text: "Lecture et écriture affichées séparément sur chaque lecteur"),

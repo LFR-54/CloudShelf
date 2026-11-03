@@ -96,6 +96,8 @@ Mesuré sur un compte Dropbox réel, avec une ligne d'environ 110 Mo/s :
 
 Dropbox accepte environ 16 téléchargements simultanés par compte et refuse ou ralentit au-delà. Le moteur de CloudShelf reste sous cette limite tout en donnant à chaque fichier lu autant de connexions qu'il peut en utiliser.
 
+Sur Google Drive, avec une ligne montante de 76 Mo/s, les envois passent par blocs de 64 Mo, 8 fichiers à la fois : 73 Mo/s, contre 45 Mo/s avec les réglages par défaut de rclone.
+
 ## Fonctionnement
 
 ```mermaid
