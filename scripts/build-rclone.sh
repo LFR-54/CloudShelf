@@ -3,7 +3,7 @@
 # for Apple Silicon, with macFUSE support. Needs Go (~/.local/go or on the PATH) and macFUSE installed.
 set -euo pipefail
 VERSION=v1.75.2
-BUILD=cloudshelf.6
+BUILD=cloudshelf.7
 ROOT=${0:A:h:h}
 SRC=$ROOT/rclone
 export PATH=$HOME/.local/go/bin:$PATH

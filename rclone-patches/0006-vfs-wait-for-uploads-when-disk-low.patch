@@ -1,5 +1,5 @@
 diff --git a/vfs/vfscache/cache.go b/vfs/vfscache/cache.go
-index ca79f22..ad5ad16 100644
+index ca79f22..e61c8ad 100644
 --- a/vfs/vfscache/cache.go
 +++ b/vfs/vfscache/cache.go
 @@ -12,6 +12,7 @@ import (
@@ -10,20 +10,21 @@ index ca79f22..ad5ad16 100644
  	"time"
  
  	"github.com/rclone/rclone/fs"
-@@ -63,8 +64,12 @@ type Cache struct {
+@@ -63,8 +64,13 @@ type Cache struct {
  	kickerMu      sync.Mutex       // mutex for cleanerKicked
  	kick          chan struct{}    // channel for kicking clear to start
  
 +	spaceOKUntil atomic.Int64 // unix nanoseconds until which writes skip checking the free space
  }
  
-+// spaceWait bounds how long WaitForSpace holds a write: macFUSE gives up on a request after 60 seconds.
++// spaceWait bounds how long WaitForSpace holds one write, well below --daemon-timeout, after which the
++// kernel gives up on the mount.
 +const spaceWait = 10 * time.Second
 +
  // AddVirtualFn if registered by the WithAddVirtual method, can be
  // called to register the object or directory at remote as a virtual
  // entry in directory listings.
-@@ -562,6 +567,29 @@ func (c *Cache) reload(ctx context.Context) error {
+@@ -562,6 +568,29 @@ func (c *Cache) reload(ctx context.Context) error {
  	return nil
  }
  

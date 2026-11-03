@@ -45,7 +45,8 @@ struct Release: Identifiable {
                 Note(text: "Ajout de lecteur : Dropbox, Google Drive, OneDrive, Box, MEGA, Proton Drive, S3, WebDAV, SFTP, FTP et SMB"),
                 Note(text: "Fiche lecteur : profil, cache, limite de débit, test de débit et journal"),
                 Note(text: "Renommer, dupliquer ou supprimer un lecteur depuis la liste ou sa fiche"),
-                Note(text: "Google Drive avec votre propre clé Google, saisie ou importée depuis son fichier JSON")
+                Note(text: "Google Drive avec votre propre clé Google, saisie ou importée depuis son fichier JSON"),
+                Note(text: "Après un plantage ou un arrêt forcé de CloudShelf, les lecteurs restés montés sont repris au lancement")
             ],
             .improved: [
                 Note(text: "Avec macFUSE, les fichiers lus ne passent plus par le disque : regarder une vidéo n'occupe aucun cache", bold: true),
@@ -54,7 +55,10 @@ struct Release: Identifiable {
                 Note(text: "Débit affiché tel qu'il passe sur le réseau, et non quand les apps lisent les données"),
                 Note(text: "Fenêtre utilisable dès 840 × 580 points"),
                 Note(text: "Lecture et écriture affichées séparément sur chaque lecteur"),
-                Note(text: "Barre d'espace colorée selon le remplissage : orange à 75 %, rouge à 90 %")
+                Note(text: "Barre d'espace colorée selon le remplissage : orange à 75 %, rouge à 90 %"),
+                Note(text: "Un lecteur qui ne joint pas son serveur au montage, comme à l'ouverture de session avant le réseau, réessaie pendant deux minutes et demie"),
+                Note(text: "La mesure du cache ne ralentit plus l'interface, et un serveur lent ne fige plus le débit affiché"),
+                Note(text: "Le journal d'un lecteur repart de zéro au-delà de 20 Mo, en gardant le précédent")
             ],
             .fixed: [
                 Note(text: "Vider le cache, supprimer un lecteur ou déplacer le cache pouvait effacer des fichiers pas encore envoyés", bold: true),
@@ -67,6 +71,14 @@ struct Release: Identifiable {
                 Note(text: "Copier un dossier avec le Finder échouait avec l'erreur -8062 et laissait la copie incomplète"),
                 Note(text: "Après avoir quitté l'app, remonter un lecteur macFUSE pouvait échouer avec « Resource busy »"),
                 Note(text: "Une grosse copie vers un lecteur pouvait remplir le disque du Mac et échouer avec l'erreur -36 : elle ralentit désormais à la vitesse d'envoi"),
+                Note(text: "Éjecter un lecteur depuis le Finder le remontait cinq secondes plus tard"),
+                Note(text: "Démonter un lecteur macFUSE pendant qu'un fichier était ouvert pouvait bloquer rclone, et l'app qui lisait le fichier, pendant de longues minutes"),
+                Note(text: "Un lecteur dont rclone ne s'arrêtait pas restait sur « Démontage… » et ne pouvait plus être monté"),
+                Note(text: "Monter un lecteur sur un dossier déjà monté par ailleurs faisait tourner deux rclone sur le même cache"),
+                Note(text: "La protection du disque pouvait remonter un lecteur au milieu d'une copie"),
+                Note(text: "L'erreur affichée après un arrêt de rclone pouvait dater d'un montage précédent"),
+                Note(text: "Fermer une vidéo avant la fin inscrivait une erreur « stream abandoned » dans le journal"),
+                Note(text: "Un lecteur nommé « .. » se montait sur le dossier parent"),
                 Note(text: "Un réglage qui demande un remontage n'était appliqué qu'au montage suivant"),
                 Note(text: "Les séparateurs du panneau de la barre des menus disparaissaient sur un fond sombre")
             ]

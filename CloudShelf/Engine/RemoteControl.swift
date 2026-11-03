@@ -3,11 +3,20 @@ import Foundation
 /// Client for the rc API of one rclone process, bound to 127.0.0.1 with a per-launch password.
 struct RemoteControl: Sendable {
     let port: Int
-    let user = "cloudshelf"
-    let password = UUID().uuidString
+    let user: String
+    let password: String
 
     init() throws {
         port = try Self.freePort()
+        user = "cloudshelf"
+        password = UUID().uuidString
+    }
+
+    /// The rc server of an rclone already running.
+    init(port: Int, user: String, password: String) {
+        self.port = port
+        self.user = user
+        self.password = password
     }
 
     var address: String { "127.0.0.1:\(port)" }

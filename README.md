@@ -34,7 +34,7 @@ CloudShelf transforme chaque compte en ligne en un lecteur du Finder, comme RaiD
 - **Le débit en direct.** Un graphique dans la barre des menus, une page Activité, et un test de débit par lecteur.
 - **Vos envois protégés.** CloudShelf garde dans le cache tout fichier pas encore envoyé, même quand vous videz le cache, et prévient avant de démonter ou de quitter.
 - **Le disque protégé.** Quand l'espace libre baisse, CloudShelf vide le cache du lecteur qui en libère le plus, sans toucher aux envois en attente.
-- **Sans surprise.** Reconnexion automatique si rclone s'arrête, limite de débit appliquée à chaud, fichiers `.DS_Store` et `._*` tenus à l'écart du cloud.
+- **Sans surprise.** Reconnexion automatique si rclone s'arrête ou si le réseau manque au montage, lecteurs repris tels quels après un arrêt brutal de l'app, éjection depuis le Finder respectée, limite de débit appliquée à chaud, fichiers `.DS_Store` et `._*` tenus à l'écart du cloud.
 - **Privé.** Aucun serveur, aucune télémétrie : vos identifiants restent dans `rclone.conf`, sur votre Mac.
 
 ## En images
@@ -113,7 +113,7 @@ flowchart LR
 
 ### Le moteur rclone modifié
 
-CloudShelf embarque rclone 1.75.2 avec six correctifs, dans [`rclone-patches/`](rclone-patches) :
+CloudShelf embarque rclone 1.75.2 avec sept correctifs, dans [`rclone-patches/`](rclone-patches) :
 
 | Correctif | Rôle |
 | --- | --- |
@@ -123,6 +123,7 @@ CloudShelf embarque rclone 1.75.2 avec six correctifs, dans [`rclone-patches/`](
 | [**Fichiers `._` et `.DS_Store` en NFS**](rclone-patches/0004-serve-nfs-macos-files-in-memory.patch) | En NFS, macOS range les attributs dans des fichiers `._`, et le Finder écrit des `.DS_Store`. Quand les filtres les excluent, le serveur NFS les garde en mémoire au lieu de les envoyer au cloud. CloudShelf monte aussi en NFS avec des verrous locaux, sans lesquels macOS refuse d'écrire les fichiers `._`. |
 | [**Fichiers `._` et `.DS_Store` avec macFUSE**](rclone-patches/0005-cmount-macos-files-in-memory.patch) | L'option `noappledouble` de macFUSE refuse de créer ces fichiers, et le Finder abandonne alors la copie de tout dossier qui contient un `.DS_Store` (erreur -8062). rclone les garde en mémoire à la place de macFUSE, sans les montrer dans les listes ni les envoyer au cloud. |
 | [**Écritures sur un disque presque plein**](rclone-patches/0006-vfs-wait-for-uploads-when-disk-low.patch) | Les fichiers écrits passent par le cache local avant d'être envoyés. Le Finder écrit plus vite que la connexion n'envoie, et une grosse copie remplissait le disque, puis échouait (erreur -36). Sous `--vfs-cache-min-free-space`, chaque écriture attend que les envois en cours libèrent de la place, 10 s au plus : la copie ralentit à la vitesse d'envoi au lieu d'échouer. |
+| [**Lecture interrompue**](rclone-patches/0007-vfs-close-before-end-is-not-an-error.patch) | Fermer un fichier avant la fin, comme une vidéo arrêtée, abandonne les blocs lus d'avance. rclone le comptait comme une erreur de transfert, et le journal se remplissait d'erreurs « stream abandoned ». |
 
 ## Compiler
 

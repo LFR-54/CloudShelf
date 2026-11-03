@@ -106,8 +106,15 @@ struct Rclone: Sendable {
                         continuation.resume(throwing: error)
                         return
                     }
+                    // Both pipes are drained at once: rclone blocks once one of them is full.
+                    let stderr = ErrorOutput()
+                    let drained = DispatchGroup()
+                    DispatchQueue.global(qos: .userInitiated).async(group: drained) {
+                        stderr.data = errors.fileHandleForReading.readDataToEndOfFile()
+                    }
                     let out = output.fileHandleForReading.readDataToEndOfFile()
-                    let err = errors.fileHandleForReading.readDataToEndOfFile()
+                    drained.wait()
+                    let err = stderr.data
                     process.waitUntilExit()
                     if process.terminationStatus == 0 {
                         continuation.resume(returning: String(decoding: out, as: UTF8.self))
@@ -157,6 +164,11 @@ struct Rclone: Sendable {
             box.terminate()
         }
     }
+}
+
+/// Standard error, read on its own thread; read back only after that thread is done.
+private final class ErrorOutput: @unchecked Sendable {
+    var data = Data()
 }
 
 /// Lets a cancellation handler end a process started on another thread.
@@ -231,21 +243,43 @@ enum RcloneLog {
             : "Google refuse les requêtes : quota dépassé. Réessayez dans quelques minutes."
     }
 
-    /// The last error written to a log file, reading only its tail.
-    static func lastError(at url: URL) -> String? {
-        let tail = tail(of: url, bytes: 16_384)
+    /// Whether rclone could not reach the server at all, as when the network is down.
+    static func isNetworkError(_ message: String) -> Bool {
+        ["dial tcp", "no such host", "network is unreachable", "no route to host", "TLS handshake timeout"].contains { message.contains($0) }
+    }
+
+    /// The last error written to a log file after `offset`, reading only its tail.
+    static func lastError(at url: URL, after offset: UInt64 = 0) -> String? {
+        let tail = tail(of: url, bytes: 16_384, after: offset)
         guard tail.contains("ERROR") || tail.contains("CRITICAL") else { return nil }
         return lastMessage(in: tail)
     }
 
-    static func tail(of url: URL, bytes: UInt64) -> String {
+    static func tail(of url: URL, bytes: UInt64, after offset: UInt64 = 0) -> String {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return "" }
         defer { try? handle.close() }
         let size = (try? handle.seekToEnd()) ?? 0
-        try? handle.seek(toOffset: size > bytes ? size - bytes : 0)
+        let start = min(size, max(offset, size > bytes ? size - bytes : 0))
+        try? handle.seek(toOffset: start)
         let text = String(decoding: (try? handle.readToEnd()) ?? Data(), as: UTF8.self)
         // Drop the first, probably partial, line.
-        return size > bytes ? String(text.drop { $0 != "\n" }.dropFirst()) : text
+        return start > offset ? String(text.drop { $0 != "\n" }.dropFirst()) : text
+    }
+
+    static func size(of url: URL) -> UInt64 {
+        ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.uint64Value ?? 0
+    }
+
+    /// rclone appends to the log of a drive at every mount; past 20 MB it starts afresh, keeping the previous one.
+    static func rotate(_ url: URL) {
+        guard size(of: url) > 20_000_000 else { return }
+        let previous = previousLog(of: url)
+        try? FileManager.default.removeItem(at: previous)
+        try? FileManager.default.moveItem(at: url, to: previous)
+    }
+
+    static func previousLog(of url: URL) -> URL {
+        url.deletingPathExtension().appendingPathExtension("old.log")
     }
 
     struct Line: Identifiable, Hashable {

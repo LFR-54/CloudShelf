@@ -23,6 +23,10 @@ final class DriveStore {
     @ObservationIgnored private var warnedFull: Set<Drive.ID> = []
     @ObservationIgnored private var warnedDiskFull = false
     @ObservationIgnored private var scannedCaches: [Drive.ID: Int64] = [:]
+    /// When the Finder announced the eject of a drive's volume.
+    @ObservationIgnored private var ejections: [Drive.ID: ContinuousClock.Instant] = [:]
+    @ObservationIgnored private var ejectObserver: NSObjectProtocol?
+    @ObservationIgnored private var refreshingSpace = false
     @ObservationIgnored private let catalog: URL?
 
     static let catalogURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -97,6 +101,8 @@ final class DriveStore {
         } catch {
             loadError = error.localizedDescription
         }
+        watchEjections()
+        adoptOrphans()
         startPolling()
         for drive in drives where drive.settings.mountAtLogin { mount(drive) }
         await refreshSpace()
@@ -149,7 +155,9 @@ final class DriveStore {
     }
 
     private func refreshSpace() async {
-        guard let rclone else { return }
+        guard let rclone, !refreshingSpace else { return }
+        refreshingSpace = true
+        defer { refreshingSpace = false }
         await withTaskGroup(of: (String, Space?).self) { group in
             for drive in drives {
                 let id = drive.id, spec = drive.remoteSpec
@@ -183,34 +191,95 @@ final class DriveStore {
             drive.state = .failed("macFUSE n'est pas installé. Choisissez NFS intégré dans la fiche du lecteur.")
             return
         }
+        // Mounting over another volume would hide it, and its rclone may be using the same cache.
+        guard !Mounts.isMounted(drive.mountPoint) else {
+            return fail(drive, "Un autre montage occupe déjà \(drive.displayPath). Démontez-le, puis réessayez.")
+        }
         drive.state = .mounting
         drive.notice = nil
+        ejections[drive.id] = nil
         do {
             // A mount point left by a process that did not exit cleanly stays busy; a new directory does not.
             removeMountPoint(drive)
             try FileManager.default.createDirectory(at: drive.mountPoint, withIntermediateDirectories: true)
             try FileManager.default.createDirectory(at: drive.logFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+            RcloneLog.rotate(drive.logFile)
             let session = try MountSession(rclone: rclone, command: drive.settings.method == .macFUSE ? "mount" : "nfsmount",
                                            remote: drive.remoteSpec, volumeName: drive.name, mountPoint: drive.mountPoint,
                                            options: MountOptions.arguments(for: drive, cacheBase: preferences.cacheBase), logFile: drive.logFile)
-            session.onExit = { [weak self, weak drive] status in
-                guard let self, let drive else { return }
-                Task { await self.sessionEnded(drive, status: status) }
-            }
-            sessions[drive.id] = session
+            watch(drive, session)
             Task { await waitUntilMounted(drive, session) }
         } catch {
             fail(drive, error.localizedDescription)
         }
     }
 
+    private func watch(_ drive: Drive, _ session: MountSession) {
+        session.onExit = { [weak self, weak drive, weak session] status in
+            guard let self, let drive, let session else { return }
+            Task { await self.sessionEnded(drive, session, status: status) }
+        }
+        sessions[drive.id] = session
+    }
+
+    /// Takes over the drives that a previous run left mounted when it crashed or was forced to quit, so they keep
+    /// serving their files and their cache is never used by two rclone processes.
+    private func adoptOrphans() {
+        let orphans = OrphanMount.all()
+        for drive in drives where sessions[drive.id] == nil {
+            let cache = MountOptions.cacheDirectory(for: drive, base: preferences.cacheBase).path
+            guard let orphan = orphans.first(where: { $0.cacheDirectory == cache }) else { continue }
+            let session = MountSession(adopting: orphan, logFile: drive.logFile)
+            watch(drive, session)
+            if Mounts.same(orphan.mountPoint, drive.mountPoint), Mounts.isMounted(drive.mountPoint) {
+                drive.state = .mounted
+                drive.notice = "Montage repris : CloudShelf s'était arrêté sans démonter ce lecteur."
+            } else {
+                drive.state = .unmounting
+                stop(drive, session)
+            }
+        }
+    }
+
+    /// The Finder and Disk Utility announce an eject; the unmounts of CloudShelf do not.
+    private func watchEjections() {
+        guard ejectObserver == nil else { return }
+        ejectObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willUnmountNotification, object: nil, queue: .main
+        ) { [weak self] notification in
+            guard let volume = notification.userInfo?[NSWorkspace.volumeURLUserInfoKey] as? URL else { return }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                for drive in self.drives where drive.isMounted && Mounts.same(drive.mountPoint, volume) {
+                    self.ejections[drive.id] = .now
+                }
+            }
+        }
+    }
+
     func unmount(_ drive: Drive) {
-        guard let session = sessions[drive.id] else { return }
+        guard let session = sessions[drive.id] else {
+            // Waiting to mount again: stops waiting.
+            if drive.state == .mounting {
+                drive.state = .unmounted
+                drive.notice = nil
+            }
+            return
+        }
         drive.state = .unmounting
+        stop(drive, session)
+    }
+
+    /// Stops rclone, forcing it after 20 s. A process stuck in the kernel as it exits never reports its end, so the
+    /// session is let go 10 s later, by when its volume is gone.
+    private func stop(_ drive: Drive, _ session: MountSession) {
         session.stop()
         Task {
             try? await Task.sleep(for: .seconds(20))
-            if sessions[drive.id] === session { await session.forceStop() }
+            guard sessions[drive.id] === session else { return }
+            await session.forceStop()
+            try? await Task.sleep(for: .seconds(10))
+            session.abandon()
         }
     }
 
@@ -220,7 +289,7 @@ final class DriveStore {
 
     /// Unmounts everything, forcing what is still mounted after 15 s.
     func unmountAll() async {
-        drives.filter { sessions[$0.id] != nil }.forEach(unmount)
+        drives.filter { sessions[$0.id] != nil || $0.state == .mounting }.forEach(unmount)
         let deadline = ContinuousClock.now + .seconds(15)
         while !sessions.isEmpty, ContinuousClock.now < deadline {
             try? await Task.sleep(for: .milliseconds(200))
@@ -259,7 +328,7 @@ final class DriveStore {
         }
         if drive.state == .mounting, session.isRunning {
             fail(drive, "Le volume n'est pas apparu après 3 minutes.")
-            session.stop()
+            stop(drive, session)
         }
     }
 
@@ -280,34 +349,61 @@ final class DriveStore {
     }
 
     /// The session is released only once its mount point is clean, so a new mount cannot race the cleanup.
-    private func sessionEnded(_ drive: Drive, status: Int32) async {
+    private func sessionEnded(_ drive: Drive, _ session: MountSession, status: Int32?) async {
+        guard sessions[drive.id] === session else { return }
         // A process that died leaves a dead NFS mount behind, which stalls the Finder.
         if Mounts.isMounted(drive.mountPoint) { await Mounts.unmount(drive.mountPoint, force: true) }
         removeMountPoint(drive)
         sessions[drive.id] = nil
+        let ejected = ejections.removeValue(forKey: drive.id).map { ContinuousClock.now - $0 < .seconds(60) } ?? false
         drive.readSpeed = 0
         drive.writeSpeed = 0
         drive.uploads = []
+        func failure() -> String {
+            RcloneLog.lastError(at: drive.logFile, after: session.logOffset)
+                ?? status.map { "rclone s'est arrêté (code \($0))." } ?? "rclone s'est arrêté."
+        }
         switch drive.state {
         case .failed:
             break
         case .unmounting, .unmounted:
             drive.state = .unmounted
+            drive.notice = nil
         case .mounting:
-            fail(drive, RcloneLog.lastError(at: drive.logFile) ?? "rclone s'est arrêté (code \(status)).")
+            let message = failure()
+            let attempts = reconnects[drive.id, default: 0]
+            // rclone gives up at once when it cannot reach the server, which happens at login before the network is up.
+            if drive.settings.autoReconnect, attempts < 5, RcloneLog.isNetworkError(message) {
+                reconnects[drive.id] = attempts + 1
+                let delay = 5 << attempts
+                await mountAgain(drive, after: delay, "Serveur injoignable, nouvelle tentative dans \(delay) s…")
+            } else {
+                reconnects[drive.id] = nil
+                fail(drive, message)
+            }
+        case .mounted where ejected:
+            // rclone exits by itself once its volume is ejected from the Finder.
+            drive.state = .unmounted
+            drive.notice = nil
         case .mounted:
             let attempts = reconnects[drive.id, default: 0]
             if drive.settings.autoReconnect, attempts < 3 {
                 reconnects[drive.id] = attempts + 1
-                drive.state = .unmounted
-                drive.notice = "rclone s'est arrêté, nouvelle tentative de montage…"
-                try? await Task.sleep(for: .seconds(5))
-                if drive.state == .unmounted { mount(drive) }
-                drive.notice = "Remonté automatiquement après l'arrêt de rclone."
+                await mountAgain(drive, after: 5, "rclone s'est arrêté, nouvelle tentative de montage…")
+                if drive.state == .mounting, sessions[drive.id] != nil { drive.notice = "Remonté automatiquement après l'arrêt de rclone." }
             } else {
-                fail(drive, RcloneLog.lastError(at: drive.logFile) ?? "rclone s'est arrêté (code \(status)).")
+                fail(drive, failure())
             }
         }
+    }
+
+    /// Mounts the drive again after `delay` seconds, saying why meanwhile. Unmounting or deleting the drive stops the wait.
+    private func mountAgain(_ drive: Drive, after delay: Int, _ notice: String) async {
+        drive.state = .mounting
+        drive.notice = notice
+        try? await Task.sleep(for: .seconds(delay))
+        guard drive.state == .mounting, sessions[drive.id] == nil, drives.contains(where: { $0 === drive }) else { return }
+        mount(drive)
     }
 
     private func fail(_ drive: Drive, _ message: String) {
@@ -328,6 +424,8 @@ final class DriveStore {
         let name = value.trimmingCharacters(in: .whitespaces)
         if name.isEmpty { return "Saisissez un nom." }
         if name.contains("/") || name.contains(":") { return "Le nom ne peut pas contenir « / » ni « : »." }
+        // The name is the folder of the mount point: "." or ".." would mount over its parent.
+        if name.hasPrefix(".") { return "Le nom ne peut pas commencer par un point." }
         if drives.contains(where: { $0.id != id && $0.name.lowercased() == name.lowercased() }) { return "Un lecteur porte déjà ce nom." }
         return nil
     }
@@ -404,6 +502,7 @@ final class DriveStore {
         save()
         try? FileManager.default.removeItem(at: MountOptions.cacheDirectory(for: drive, base: preferences.cacheBase))
         try? FileManager.default.removeItem(at: drive.logFile)
+        try? FileManager.default.removeItem(at: RcloneLog.previousLog(of: drive.logFile))
         if removesRemote(drive) {
             for remote in drive.record.createdRemotes.reversed() { try? await rclone?.deleteRemote(remote) }
         }
@@ -685,19 +784,28 @@ final class DriveStore {
             while !Task.isCancelled {
                 await self?.sampleThroughput()
                 if tick % 10 == 0 {
-                    self?.measureCaches()
+                    await self?.measureCaches()
                     await self?.protectDisk()
                 }
-                if tick % 300 == 299 { await self?.refreshSpace() }
+                // `about` can wait minutes on a slow server, which must not hold the throughput or the disk guard.
+                if tick % 300 == 299 { Task { await self?.refreshSpace() } }
                 tick += 1
                 try? await Task.sleep(for: .seconds(1))
             }
         }
     }
 
+    /// All drives at once, so an rclone that is slow to answer only delays its own figures.
     private func sampleThroughput() async {
+        let mounted = drives.compactMap { drive in drive.isMounted ? sessions[drive.id].map { (drive.id, $0) } : nil }
+        let samples = await withTaskGroup(of: (Drive.ID, MountSession.Sample?).self) { group in
+            for (id, session) in mounted { group.addTask { (id, try? await session.sample()) } }
+            var samples: [Drive.ID: MountSession.Sample] = [:]
+            for await (id, sample) in group { samples[id] = sample }
+            return samples
+        }
         for drive in drives {
-            if drive.isMounted, let session = sessions[drive.id], let sample = try? await session.sample() {
+            if drive.isMounted, let sample = samples[drive.id] {
                 drive.readSpeed = sample.read
                 drive.writeSpeed = sample.write
                 drive.uploads = sample.uploads
@@ -714,17 +822,27 @@ final class DriveStore {
     }
 
     /// Unmounted drives also report the files left to upload, which only leave once the drive is mounted again;
-    /// their cache is read again only when its size changes.
-    private func measureCaches() {
-        for drive in drives {
-            drive.cacheBytes = DiskSpace.allocated(in: MountOptions.cacheDirectory(for: drive, base: preferences.cacheBase))
-            if sessions[drive.id] != nil {
-                scannedCaches[drive.id] = nil
-            } else if scannedCaches[drive.id] != drive.cacheBytes {
-                scannedCaches[drive.id] = drive.cacheBytes
-                drive.pendingUploads = pendingUploads(drive).files
+    /// their cache is read again only when its size changes. The folders are walked off the main thread, as a cache
+    /// can hold many thousands of files.
+    private func measureCaches() async {
+        let folders = drives.map { ($0.id, MountOptions.cacheDirectory(for: $0, base: preferences.cacheBase)) }
+        let sizes = await Task.detached(priority: .utility) { folders.map { ($0.0, DiskSpace.allocated(in: $0.1)) } }.value
+        for (id, bytes) in sizes {
+            guard let drive = drive(id) else { continue }
+            drive.cacheBytes = bytes
+            if sessions[id] != nil {
+                scannedCaches[id] = nil
+            } else if scannedCaches[id] != bytes {
+                scannedCaches[id] = bytes
+                drive.pendingUploads = await pendingUploadsInBackground(drive).files
             }
         }
+    }
+
+    /// `pendingUploads`, reading the description of every file of the cache off the main thread.
+    private func pendingUploadsInBackground(_ drive: Drive) async -> CacheFolder.Pending {
+        let folder = MountOptions.cacheDirectory(for: drive, base: preferences.cacheBase)
+        return await Task.detached(priority: .utility) { CacheFolder.pending(in: folder) }.value
     }
 
     /// Over NFS rclone cannot evict a file while it is being read, so a long stream outgrows the cache quota.
@@ -732,12 +850,20 @@ final class DriveStore {
     /// still waiting to be uploaded, which nothing may delete.
     private func protectDisk() async {
         guard let free = DiskSpace.available(at: FileManager.default.homeDirectoryForCurrentUser), free < DiskSpace.floor else { return }
-        // A drive still sending files is left alone: remounting it would break the copy writing them, and rclone
-        // removes what it has sent itself, holding writes until there is room.
-        let candidates = drives.filter { $0.isMounted && $0.pendingUploads == 0 }
-            .map { drive in (drive, drive.cacheBytes - pendingUploads(drive).bytes) }
-        guard let (drive, freeable) = candidates.max(by: { $0.1 < $1.1 }), freeable >= 1_000_000_000 else {
-            if !warnedDiskFull, drives.contains(where: { $0.pendingUploads > 0 }) {
+        // A drive with files waiting is left alone: remounting it would break the copy writing them, and rclone
+        // removes what it has sent itself, holding writes until there is room. rclone marks a file as waiting from
+        // its first write, before it counts it as an upload.
+        var candidates: [(drive: Drive, freeable: Int64)] = []
+        var waiting = false
+        for drive in drives where drive.isMounted {
+            if await pendingUploadsInBackground(drive).files > 0 {
+                waiting = true
+            } else {
+                candidates.append((drive, drive.cacheBytes))
+            }
+        }
+        guard let (drive, freeable) = candidates.max(by: { $0.freeable < $1.freeable }), freeable >= 1_000_000_000 else {
+            if !warnedDiskFull, waiting {
                 warnedDiskFull = true
                 notify("Le disque est presque plein", "Des fichiers attendent d'être envoyés et ne peuvent pas être retirés du cache. Libérez de la place sur ce Mac.")
             }

@@ -1,0 +1,23 @@
+diff --git a/vfs/read.go b/vfs/read.go
+index eb07b72..75b5dca 100644
+--- a/vfs/read.go
++++ b/vfs/read.go
+@@ -12,6 +12,7 @@ import (
+ 
+ 	"github.com/rclone/rclone/fs"
+ 	"github.com/rclone/rclone/fs/accounting"
++	"github.com/rclone/rclone/fs/asyncreader"
+ 	"github.com/rclone/rclone/fs/chunkedreader"
+ 	"github.com/rclone/rclone/fs/hash"
+ )
+@@ -420,6 +421,10 @@ func (fh *ReadFileHandle) close() error {
+ 		}()
+ 		// Close first so that we have hashes
+ 		err = fh.r.Close()
++		// Closing before the end abandons the chunks still being read ahead
++		if errors.Is(err, asyncreader.ErrorStreamAbandoned) {
++			err = nil
++		}
+ 		if err != nil {
+ 			return err
+ 		}
