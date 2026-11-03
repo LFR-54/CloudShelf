@@ -1,0 +1,315 @@
+diff --git a/cmd/cmount/fs.go b/cmd/cmount/fs.go
+index c425529..45df24e 100644
+--- a/cmd/cmount/fs.go
++++ b/cmd/cmount/fs.go
+@@ -16,12 +16,16 @@ import (
+ 	"github.com/rclone/rclone/fs"
+ 	"github.com/rclone/rclone/fs/fserrors"
+ 	"github.com/rclone/rclone/fs/log"
++	"github.com/rclone/rclone/lib/macmeta"
+ 	"github.com/rclone/rclone/vfs"
+ 	"github.com/winfsp/cgofuse/fuse"
+ )
+ 
+ const fhUnset = ^uint64(0)
+ 
++// metaHandle marks the file handles of macOS metadata files kept in memory, which have their own table.
++const metaHandle = uint64(1) << 62
++
+ // FS represents the top level filing system
+ type FS struct {
+ 	VFS       *vfs.VFS
+@@ -31,6 +35,9 @@ type FS struct {
+ 	mu        sync.Mutex // to protect the below
+ 	handles   []vfs.Handle
+ 	destroyed atomic.Int32
++	meta      *macmeta.Store // macOS metadata files kept in memory, or nil to store them like any file
++	metaFiles map[uint64]*macmeta.Handle
++	metaNext  uint64
+ }
+ 
+ // NewFS makes a new FS
+@@ -41,9 +48,56 @@ func NewFS(VFS *vfs.VFS, opt *mountlib.Options) *FS {
+ 		opt:   opt,
+ 		ready: make(chan (struct{})),
+ 	}
++	// macFUSE's noappledouble refuses to create ._ and .DS_Store files, which fails every Finder copy of a
++	// folder holding a .DS_Store, so rclone keeps them in memory itself instead.
++	if runtime.GOOS == "darwin" && opt.NoAppleDouble {
++		fsys.meta = macmeta.New()
++		fsys.metaFiles = map[uint64]*macmeta.Handle{}
++	}
+ 	return fsys
+ }
+ 
++// isMeta reports whether path is a macOS metadata file kept in memory.
++func (fsys *FS) isMeta(path string) bool {
++	return fsys.meta != nil && macmeta.Match(path)
++}
++
++// openMeta opens the metadata file at path, returning its file handle.
++func (fsys *FS) openMeta(path string, flags int, mode uint32) (errc int, fh uint64) {
++	handle, err := fsys.meta.Open(path, flags, os.FileMode(mode))
++	if err != nil {
++		return translateError(err), fhUnset
++	}
++	fsys.mu.Lock()
++	defer fsys.mu.Unlock()
++	fsys.metaNext++
++	fh = metaHandle | fsys.metaNext
++	fsys.metaFiles[fh] = handle
++	return 0, fh
++}
++
++// getMeta returns the metadata file open as fh.
++func (fsys *FS) getMeta(fh uint64) (handle *macmeta.Handle, errc int) {
++	fsys.mu.Lock()
++	defer fsys.mu.Unlock()
++	handle, ok := fsys.metaFiles[fh]
++	if !ok {
++		return nil, -fuse.EBADF
++	}
++	return handle, 0
++}
++
++// releaseMeta closes the metadata file open as fh.
++func (fsys *FS) releaseMeta(fh uint64) (errc int) {
++	fsys.mu.Lock()
++	defer fsys.mu.Unlock()
++	if _, ok := fsys.metaFiles[fh]; !ok {
++		return -fuse.EBADF
++	}
++	delete(fsys.metaFiles, fh)
++	return 0
++}
++
+ // Open a handle returning an integer file handle
+ func (fsys *FS) openHandle(handle vfs.Handle) (fh uint64) {
+ 	fsys.mu.Lock()
+@@ -137,8 +191,14 @@ func (fsys *FS) getNode(path string, fh uint64) (node vfs.Node, handle vfs.Handl
+ 	return
+ }
+ 
++// nodeInfo is what stat reads from a vfs.Node, which metadata files provide too.
++type nodeInfo interface {
++	os.FileInfo
++	Inode() uint64
++}
++
+ // stat fills up the stat block for Node
+-func (fsys *FS) stat(node vfs.Node, stat *fuse.Stat_t) (errc int) {
++func (fsys *FS) stat(node nodeInfo, stat *fuse.Stat_t) (errc int) {
+ 	Size := uint64(node.Size())
+ 	Blocks := (Size + 511) / 512
+ 	modTime := node.ModTime()
+@@ -178,6 +238,20 @@ func (fsys *FS) Destroy() {
+ // Getattr reads the attributes for path
+ func (fsys *FS) Getattr(path string, stat *fuse.Stat_t, fh uint64) (errc int) {
+ 	defer log.Trace(path, "fh=0x%X", fh)("errc=%v", &errc)
++	if fh&metaHandle != 0 && fh != fhUnset {
++		handle, errc := fsys.getMeta(fh)
++		if errc != 0 {
++			return errc
++		}
++		return fsys.stat(handle.Stat(), stat)
++	}
++	if fsys.isMeta(path) {
++		info, err := fsys.meta.Stat(path)
++		if err != nil {
++			return translateError(err)
++		}
++		return fsys.stat(info, stat)
++	}
+ 	node, _, errc := fsys.getNode(path, fh)
+ 	if errc == 0 {
+ 		errc = fsys.stat(node, stat)
+@@ -242,6 +316,10 @@ func (fsys *FS) Readdir(dirPath string,
+ 	fill("..", nil, 0)
+ 	for _, node := range nodes {
+ 		name := node.Name()
++		// Those on the remote are hidden like the ones kept in memory, as macFUSE's noappledouble does.
++		if fsys.isMeta(name) {
++			continue
++		}
+ 		if len(name) > mountlib.MaxLeafSize {
+ 			fs.Errorf(dirPath, "Name too long (%d bytes) for FUSE, skipping: %s", len(name), name)
+ 			continue
+@@ -288,6 +366,10 @@ func (fsys *FS) OpenEx(path string, fi *fuse.FileInfo_t) (errc int) {
+ 
+ 	// translate the fuse flags to os flags
+ 	flags := translateOpenFlags(fi.Flags)
++	if fsys.isMeta(path) {
++		errc, fi.Fh = fsys.openMeta(path, flags, 0)
++		return errc
++	}
+ 	handle, err := fsys.VFS.OpenFile(path, flags, 0777)
+ 	if err != nil {
+ 		return translateError(err)
+@@ -318,6 +400,10 @@ func (fsys *FS) Open(path string, flags int) (errc int, fh uint64) {
+ func (fsys *FS) CreateEx(filePath string, mode uint32, fi *fuse.FileInfo_t) (errc int) {
+ 	defer log.Trace(filePath, "flags=0x%X, mode=0%o", fi.Flags, mode)("errc=%d, fh=0x%X", &errc, &fi.Fh)
+ 	fi.Fh = fhUnset
++	if fsys.isMeta(filePath) {
++		errc, fi.Fh = fsys.openMeta(filePath, translateOpenFlags(fi.Flags)|os.O_CREATE, mode)
++		return errc
++	}
+ 	leaf, parentDir, errc := fsys.lookupParentDir(filePath)
+ 	if errc != 0 {
+ 		return errc
+@@ -348,6 +434,20 @@ func (fsys *FS) Create(filePath string, flags int, mode uint32) (errc int, fh ui
+ // Truncate truncates a file to size
+ func (fsys *FS) Truncate(path string, size int64, fh uint64) (errc int) {
+ 	defer log.Trace(path, "size=%d, fh=0x%X", size, fh)("errc=%d", &errc)
++	if fsys.isMeta(path) {
++		var handle *macmeta.Handle
++		if fh == fhUnset {
++			errc, fh = fsys.openMeta(path, os.O_WRONLY, 0)
++			if errc != 0 {
++				return errc
++			}
++			defer fsys.releaseMeta(fh)
++		}
++		if handle, errc = fsys.getMeta(fh); errc != 0 {
++			return errc
++		}
++		return translateError(handle.Truncate(size))
++	}
+ 	node, handle, errc := fsys.getNode(path, fh)
+ 	if errc != 0 {
+ 		return errc
+@@ -367,7 +467,15 @@ func (fsys *FS) Truncate(path string, size int64, fh uint64) (errc int) {
+ // Read data from file handle
+ func (fsys *FS) Read(path string, buff []byte, ofst int64, fh uint64) (n int) {
+ 	defer log.Trace(path, "ofst=%d, fh=0x%X", ofst, fh)("n=%d", &n)
+-	handle, errc := fsys.getHandle(fh)
++	var handle interface {
++		ReadAt(b []byte, off int64) (n int, err error)
++	}
++	var errc int
++	if fh&metaHandle != 0 {
++		handle, errc = fsys.getMeta(fh)
++	} else {
++		handle, errc = fsys.getHandle(fh)
++	}
+ 	if errc != 0 {
+ 		return errc
+ 	}
+@@ -382,7 +490,15 @@ func (fsys *FS) Read(path string, buff []byte, ofst int64, fh uint64) (n int) {
+ // Write data to file handle
+ func (fsys *FS) Write(path string, buff []byte, ofst int64, fh uint64) (n int) {
+ 	defer log.Trace(path, "ofst=%d, fh=0x%X", ofst, fh)("n=%d", &n)
+-	handle, errc := fsys.getHandle(fh)
++	var handle interface {
++		WriteAt(b []byte, off int64) (n int, err error)
++	}
++	var errc int
++	if fh&metaHandle != 0 {
++		handle, errc = fsys.getMeta(fh)
++	} else {
++		handle, errc = fsys.getHandle(fh)
++	}
+ 	if errc != 0 {
+ 		return errc
+ 	}
+@@ -396,6 +512,10 @@ func (fsys *FS) Write(path string, buff []byte, ofst int64, fh uint64) (n int) {
+ // Flush flushes an open file descriptor or path
+ func (fsys *FS) Flush(path string, fh uint64) (errc int) {
+ 	defer log.Trace(path, "fh=0x%X", fh)("errc=%d", &errc)
++	if fh&metaHandle != 0 {
++		_, errc = fsys.getMeta(fh)
++		return errc
++	}
+ 	handle, errc := fsys.getHandle(fh)
+ 	if errc != 0 {
+ 		return errc
+@@ -406,6 +526,9 @@ func (fsys *FS) Flush(path string, fh uint64) (errc int) {
+ // Release closes the file if still open
+ func (fsys *FS) Release(path string, fh uint64) (errc int) {
+ 	defer log.Trace(path, "fh=0x%X", fh)("errc=%d", &errc)
++	if fh&metaHandle != 0 {
++		return fsys.releaseMeta(fh)
++	}
+ 	handle, errc := fsys.getHandle(fh)
+ 	if errc != 0 {
+ 		return errc
+@@ -417,6 +540,9 @@ func (fsys *FS) Release(path string, fh uint64) (errc int) {
+ // Unlink removes a file.
+ func (fsys *FS) Unlink(filePath string) (errc int) {
+ 	defer log.Trace(filePath, "")("errc=%d", &errc)
++	if fsys.isMeta(filePath) {
++		return translateError(fsys.meta.Remove(filePath))
++	}
+ 	leaf, parentDir, errc := fsys.lookupParentDir(filePath)
+ 	if errc != 0 {
+ 		return errc
+@@ -442,13 +568,28 @@ func (fsys *FS) Rmdir(dirPath string) (errc int) {
+ 	if errc != 0 {
+ 		return errc
+ 	}
+-	return translateError(parentDir.RemoveName(leaf))
++	errc = translateError(parentDir.RemoveName(leaf))
++	if errc == 0 && fsys.meta != nil {
++		fsys.meta.RemoveAll(dirPath)
++	}
++	return errc
+ }
+ 
+ // Rename renames a file.
+ func (fsys *FS) Rename(oldPath string, newPath string) (errc int) {
+ 	defer log.Trace(oldPath, "newPath=%q", newPath)("errc=%d", &errc)
+-	return translateError(fsys.VFS.Rename(oldPath, newPath))
++	if fsys.isMeta(oldPath) || fsys.isMeta(newPath) {
++		if fsys.isMeta(oldPath) && fsys.isMeta(newPath) {
++			return translateError(fsys.meta.Rename(oldPath, newPath))
++		}
++		// Metadata files only live in memory: turning one into a regular file or back is not supported.
++		return -fuse.EPERM
++	}
++	errc = translateError(fsys.VFS.Rename(oldPath, newPath))
++	if errc == 0 && fsys.meta != nil {
++		fsys.meta.RenameAll(oldPath, newPath)
++	}
++	return errc
+ }
+ 
+ // Windows sometimes seems to send times that are the epoch which is
+@@ -459,6 +600,13 @@ var invalidDateCutoff = time.Date(1601, 1, 2, 0, 0, 0, 0, time.UTC)
+ // Utimens changes the access and modification times of a file.
+ func (fsys *FS) Utimens(path string, tmsp []fuse.Timespec) (errc int) {
+ 	defer log.Trace(path, "tmsp=%+v", tmsp)("errc=%d", &errc)
++	if fsys.isMeta(path) {
++		if len(tmsp) < 2 {
++			_, err := fsys.meta.Stat(path)
++			return translateError(err)
++		}
++		return translateError(fsys.meta.Chtimes(path, tmsp[1].Time()))
++	}
+ 	node, errc := fsys.lookupNode(path)
+ 	if errc != 0 {
+ 		return errc
+@@ -554,8 +702,7 @@ func shouldIgnoreAppleXattr(opt *mountlib.Options) bool {
+ }
+ 
+ // discardXattrs reports whether extended attributes are accepted and dropped. On macOS a refused attribute
+-// makes the kernel keep it in a ._ file, which noappledouble forbids, so every copy carrying attributes
+-// (downloaded files, Finder tags) fails with "Operation not permitted". The remote cannot keep them anyway.
++// makes the kernel keep it in a ._ file, which would only live in memory: the remote cannot keep them anyway.
+ func discardXattrs(opt *mountlib.Options) bool {
+ 	return runtime.GOOS == "darwin" && opt.NoAppleDouble
+ }
+diff --git a/cmd/cmount/mount.go b/cmd/cmount/mount.go
+index 6515b33..72d9e59 100644
+--- a/cmd/cmount/mount.go
++++ b/cmd/cmount/mount.go
+@@ -89,9 +89,8 @@ func mountOptions(VFS *vfs.VFS, device string, mountpoint string, opt *mountlib.
+ 			if opt.VolumeName != "" {
+ 				options = append(options, "-o", "volname="+opt.VolumeName)
+ 			}
+-			if opt.NoAppleDouble {
+-				options = append(options, "-o", "noappledouble")
+-			}
++			// NoAppleDouble is handled by FS, which keeps ._ and .DS_Store files in memory: macFUSE's
++			// noappledouble refuses them, failing Finder copies.
+ 			if opt.NoAppleXattr {
+ 				options = append(options, "-o", "noapplexattr")
+ 			}

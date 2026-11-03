@@ -1,0 +1,794 @@
+diff --git a/cmd/serve/nfs/filesystem.go b/cmd/serve/nfs/filesystem.go
+index 2ee8eca..1a61ebd 100644
+--- a/cmd/serve/nfs/filesystem.go
++++ b/cmd/serve/nfs/filesystem.go
+@@ -11,6 +11,7 @@ import (
+ 	billy "github.com/go-git/go-billy/v5"
+ 	"github.com/rclone/rclone/fs"
+ 	"github.com/rclone/rclone/fs/log"
++	"github.com/rclone/rclone/lib/macmeta"
+ 	"github.com/rclone/rclone/vfs"
+ 	"github.com/rclone/rclone/vfs/vfscommon"
+ 	"github.com/willscott/go-nfs/file"
+@@ -45,7 +46,8 @@ func setSys(fi os.FileInfo) {
+ // FS is our wrapper around the VFS to properly support billy.Filesystem interface
+ type FS struct {
+ 	vfs  *vfs.VFS
+-	root string // absolute path within the VFS this FS is rooted at; empty means VFS root
++	root string         // absolute path within the VFS this FS is rooted at; empty means VFS root
++	meta *macmeta.Store // macOS metadata files kept in memory, or nil to store them like any file
+ }
+ 
+ // fullPath returns the absolute path within the VFS for name, which is
+@@ -60,7 +62,7 @@ func (f *FS) fullPath(name string) string {
+ // subFS returns a new *FS rooted at root within the VFS. root must already
+ // be a cleaned absolute path that the caller has validated as a directory.
+ func (f *FS) subFS(root string) *FS {
+-	return &FS{vfs: f.vfs, root: root}
++	return &FS{vfs: f.vfs, root: root, meta: f.meta}
+ }
+ 
+ // ReadDir implements read dir
+@@ -79,22 +81,34 @@ func (f *FS) ReadDir(p string) (dir []os.FileInfo, err error) {
+ 
+ // Create implements creating new files
+ func (f *FS) Create(filename string) (node billy.File, err error) {
++	name := filename
+ 	filename = f.fullPath(filename)
+ 	defer log.Trace(filename, "")("%v, err=%v", &node, &err)
++	if f.inMemory(filename) {
++		return f.openMeta(filename, name, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o644)
++	}
+ 	return f.vfs.Create(filename)
+ }
+ 
+ // Open opens a file
+ func (f *FS) Open(filename string) (node billy.File, err error) {
++	name := filename
+ 	filename = f.fullPath(filename)
+ 	defer log.Trace(filename, "")("%v, err=%v", &node, &err)
++	if f.inMemory(filename) {
++		return f.openMeta(filename, name, os.O_RDONLY, 0)
++	}
+ 	return f.vfs.Open(filename)
+ }
+ 
+ // OpenFile opens a file
+ func (f *FS) OpenFile(filename string, flag int, perm os.FileMode) (node billy.File, err error) {
++	name := filename
+ 	filename = f.fullPath(filename)
+ 	defer log.Trace(filename, "flag=0x%X, perm=%v", flag, perm)("%v, err=%v", &node, &err)
++	if f.inMemory(filename) {
++		return f.openMeta(filename, name, flag, perm)
++	}
+ 	return f.vfs.OpenFile(filename, flag, perm)
+ }
+ 
+@@ -102,6 +116,9 @@ func (f *FS) OpenFile(filename string, flag int, perm os.FileMode) (node billy.F
+ func (f *FS) Stat(filename string) (fi os.FileInfo, err error) {
+ 	filename = f.fullPath(filename)
+ 	defer log.Trace(filename, "")("fi=%v, err=%v", &fi, &err)
++	if f.inMemory(filename) {
++		return f.statMeta(filename)
++	}
+ 	fi, err = f.vfs.Stat(filename)
+ 	if err != nil {
+ 		return nil, err
+@@ -115,14 +132,32 @@ func (f *FS) Rename(oldpath, newpath string) (err error) {
+ 	oldpath = f.fullPath(oldpath)
+ 	newpath = f.fullPath(newpath)
+ 	defer log.Trace(oldpath, "newpath=%q", newpath)("err=%v", &err)
+-	return f.vfs.Rename(oldpath, newpath)
++	if f.inMemory(oldpath) || f.inMemory(newpath) {
++		if f.inMemory(oldpath) && f.inMemory(newpath) {
++			return f.meta.Rename(oldpath, newpath)
++		}
++		// Metadata files only live in memory: turning one into a regular file or back is not supported.
++		return os.ErrPermission
++	}
++	err = f.vfs.Rename(oldpath, newpath)
++	if err == nil && f.meta != nil {
++		f.meta.RenameAll(oldpath, newpath)
++	}
++	return err
+ }
+ 
+ // Remove deletes a file
+ func (f *FS) Remove(filename string) (err error) {
+ 	filename = f.fullPath(filename)
+ 	defer log.Trace(filename, "")("err=%v", &err)
+-	return f.vfs.Remove(filename)
++	if f.inMemory(filename) {
++		return f.meta.Remove(filename)
++	}
++	err = f.vfs.Remove(filename)
++	if err == nil && f.meta != nil {
++		f.meta.RemoveAll(filename)
++	}
++	return err
+ }
+ 
+ // Join joins path elements
+@@ -160,6 +195,9 @@ func (f *FS) MkdirAll(filename string, perm os.FileMode) (err error) {
+ func (f *FS) Lstat(filename string) (fi os.FileInfo, err error) {
+ 	filename = f.fullPath(filename)
+ 	defer log.Trace(filename, "")("fi=%v, err=%v", &fi, &err)
++	if f.inMemory(filename) {
++		return f.statMeta(filename)
++	}
+ 	fi, err = f.vfs.Stat(filename)
+ 	if err != nil {
+ 		return nil, err
+@@ -186,6 +224,9 @@ func (f *FS) Readlink(link string) (result string, err error) {
+ func (f *FS) Chmod(name string, mode os.FileMode) (err error) {
+ 	name = f.fullPath(name)
+ 	defer log.Trace(name, "mode=%v", mode)("err=%v", &err)
++	if f.inMemory(name) {
++		return f.meta.Chmod(name, mode)
++	}
+ 	err = f.vfs.Chmod(name, mode)
+ 	// Mask Chmod not implemented
+ 	if err == vfs.ENOSYS {
+@@ -204,6 +245,10 @@ func (f *FS) Lchown(name string, uid, gid int) (err error) {
+ func (f *FS) Chown(name string, uid, gid int) (err error) {
+ 	name = f.fullPath(name)
+ 	defer log.Trace(name, "uid=%d, gid=%d", uid, gid)("err=%v", &err)
++	if f.inMemory(name) {
++		_, err = f.meta.Stat(name)
++		return err
++	}
+ 	err = f.vfs.Chown(name, uid, gid)
+ 	// Mask Chown not implemented
+ 	if err == vfs.ENOSYS {
+@@ -216,6 +261,9 @@ func (f *FS) Chown(name string, uid, gid int) (err error) {
+ func (f *FS) Chtimes(name string, atime time.Time, mtime time.Time) (err error) {
+ 	name = f.fullPath(name)
+ 	defer log.Trace(name, "atime=%v, mtime=%v", atime, mtime)("err=%v", &err)
++	if f.inMemory(name) {
++		return f.meta.Chtimes(name, mtime)
++	}
+ 	return f.vfs.Chtimes(name, atime, mtime)
+ }
+ 
+diff --git a/cmd/serve/nfs/handler.go b/cmd/serve/nfs/handler.go
+index 0b354d1..29d77e7 100644
+--- a/cmd/serve/nfs/handler.go
++++ b/cmd/serve/nfs/handler.go
+@@ -12,7 +12,9 @@ import (
+ 
+ 	"github.com/go-git/go-billy/v5"
+ 	"github.com/rclone/rclone/fs"
++	"github.com/rclone/rclone/fs/filter"
+ 	"github.com/rclone/rclone/fs/log"
++	"github.com/rclone/rclone/lib/macmeta"
+ 	"github.com/rclone/rclone/vfs"
+ 	"github.com/willscott/go-nfs"
+ )
+@@ -33,6 +35,10 @@ func NewHandler(ctx context.Context, vfs *vfs.VFS, opt *Options) (handler nfs.Ha
+ 		opt:     *opt,
+ 		billyFS: &FS{vfs: vfs},
+ 	}
++	// The filters do not apply to writes, so hidden macOS metadata files are kept in memory rather than uploaded.
++	if fi := filter.GetConfig(ctx); !fi.IncludeRemote("._") || !fi.IncludeRemote(".DS_Store") {
++		h.billyFS.meta = macmeta.New()
++	}
+ 	h.opt.HandleLimit = h.opt.Limit()
+ 	h.Cache, err = h.getCache()
+ 	if err != nil {
+diff --git a/cmd/serve/nfs/macmeta.go b/cmd/serve/nfs/macmeta.go
+new file mode 100644
+index 0000000..868d176
+--- /dev/null
++++ b/cmd/serve/nfs/macmeta.go
+@@ -0,0 +1,52 @@
++//go:build unix
++
++package nfs
++
++import (
++	"os"
++
++	billy "github.com/go-git/go-billy/v5"
++	"github.com/rclone/rclone/lib/macmeta"
++	"github.com/willscott/go-nfs/file"
++)
++
++// metaFile is an open macOS metadata file kept in memory.
++type metaFile struct {
++	*macmeta.Handle
++	name string
++}
++
++func (f metaFile) Name() string  { return f.name }
++func (f metaFile) Lock() error   { return nil }
++func (f metaFile) Unlock() error { return nil }
++
++var _ billy.File = metaFile{}
++
++// metaInfo describes a metadata file with the ownership and file id the NFS server reads from Sys.
++type metaInfo struct {
++	*macmeta.Info
++	sys *file.FileInfo
++}
++
++func (i metaInfo) Sys() any { return i.sys }
++
++// inMemory reports whether name is a macOS metadata file kept in memory instead of the VFS.
++func (f *FS) inMemory(name string) bool {
++	return f.meta != nil && macmeta.Match(name)
++}
++
++func (f *FS) openMeta(filename, name string, flag int, perm os.FileMode) (billy.File, error) {
++	h, err := f.meta.Open(filename, flag, perm)
++	if err != nil {
++		return nil, err
++	}
++	return metaFile{Handle: h, name: name}, nil
++}
++
++func (f *FS) statMeta(filename string) (os.FileInfo, error) {
++	info, err := f.meta.Stat(filename)
++	if err != nil {
++		return nil, err
++	}
++	return metaInfo{Info: info, sys: &file.FileInfo{Nlink: 1, UID: f.vfs.Opt.UID, GID: f.vfs.Opt.GID, Fileid: info.Inode()}}, nil
++}
+diff --git a/cmd/serve/nfs/macmeta_test.go b/cmd/serve/nfs/macmeta_test.go
+new file mode 100644
+index 0000000..9617bf2
+--- /dev/null
++++ b/cmd/serve/nfs/macmeta_test.go
+@@ -0,0 +1,92 @@
++//go:build unix
++
++package nfs
++
++import (
++	"context"
++	"io"
++	"os"
++	"testing"
++
++	"github.com/rclone/rclone/fs"
++	"github.com/rclone/rclone/lib/macmeta"
++	"github.com/rclone/rclone/vfs"
++	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++	"github.com/willscott/go-nfs/file"
++)
++
++func TestMetadataFilesInMemory(t *testing.T) {
++	ctx := context.Background()
++	remote, err := fs.NewFs(ctx, ":memory:nfs-macmeta-test")
++	require.NoError(t, err)
++	v := vfs.New(ctx, remote, nil)
++	f := &FS{vfs: v, meta: macmeta.New()}
++
++	w, err := f.Create("dir/._photo.jpg")
++	require.NoError(t, err)
++	_, err = w.Write([]byte("attributes"))
++	require.NoError(t, err)
++	require.NoError(t, w.Close())
++
++	fi, err := f.Stat("dir/._photo.jpg")
++	require.NoError(t, err)
++	assert.Equal(t, "._photo.jpg", fi.Name())
++	assert.Equal(t, int64(10), fi.Size())
++	sys, ok := fi.Sys().(*file.FileInfo)
++	require.True(t, ok)
++	assert.Equal(t, v.Opt.UID, sys.UID)
++	assert.GreaterOrEqual(t, sys.Fileid, uint64(1<<62))
++	_, err = v.Stat("dir/._photo.jpg")
++	assert.ErrorIs(t, err, os.ErrNotExist)
++
++	_, err = f.OpenFile("dir/._photo.jpg", os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o644)
++	assert.ErrorIs(t, err, os.ErrExist)
++
++	rw, err := f.OpenFile("dir/._photo.jpg", os.O_RDWR, 0)
++	require.NoError(t, err)
++	_, err = rw.Seek(4, io.SeekStart)
++	require.NoError(t, err)
++	_, err = rw.Write([]byte("IBUTES-X"))
++	require.NoError(t, err)
++	got := make([]byte, 32)
++	n, err := rw.ReadAt(got, 0)
++	assert.Equal(t, io.EOF, err)
++	assert.Equal(t, "attrIBUTES-X", string(got[:n]))
++	require.NoError(t, rw.Truncate(4))
++
++	require.NoError(t, f.Rename("dir/._photo.jpg", "dir/._image.jpg"))
++	_, err = f.Stat("dir/._photo.jpg")
++	assert.ErrorIs(t, err, os.ErrNotExist)
++	fi, err = f.Lstat("dir/._image.jpg")
++	require.NoError(t, err)
++	assert.Equal(t, int64(4), fi.Size())
++
++	assert.ErrorIs(t, f.Rename("dir/._image.jpg", "dir/image.jpg"), os.ErrPermission)
++	require.NoError(t, f.Chmod("dir/._image.jpg", 0o600))
++	require.NoError(t, f.Remove("dir/._image.jpg"))
++	_, err = f.Open("dir/._image.jpg")
++	assert.ErrorIs(t, err, os.ErrNotExist)
++	assert.ErrorIs(t, f.Remove("dir/._image.jpg"), os.ErrNotExist)
++
++	ds, err := f.Create(".DS_Store")
++	require.NoError(t, err)
++	_, err = ds.Write([]byte("Bud1"))
++	require.NoError(t, err)
++	fi, err = f.Stat(".DS_Store")
++	require.NoError(t, err)
++	assert.Equal(t, int64(4), fi.Size())
++	_, err = v.Stat(".DS_Store")
++	assert.ErrorIs(t, err, os.ErrNotExist)
++
++	// Removing a directory removes the metadata files listings do not show.
++	require.NoError(t, f.MkdirAll("show", 0o755))
++	_, err = f.Create("show/.DS_Store")
++	require.NoError(t, err)
++	require.NoError(t, f.Rename("show", "series"))
++	_, err = f.Stat("series/.DS_Store")
++	require.NoError(t, err)
++	require.NoError(t, f.Remove("series"))
++	_, err = f.Stat("series/.DS_Store")
++	assert.ErrorIs(t, err, os.ErrNotExist)
++}
+diff --git a/lib/macmeta/macmeta.go b/lib/macmeta/macmeta.go
+new file mode 100644
+index 0000000..686a21e
+--- /dev/null
++++ b/lib/macmeta/macmeta.go
+@@ -0,0 +1,336 @@
++// Package macmeta keeps in memory the files macOS writes beside others to hold metadata: the ._ files that
++// carry extended attributes on a filesystem without them, and the .DS_Store files of the Finder.
++//
++// Filters hide such files from listings but do not apply to writes, so a mount would upload them, and
++// refusing them makes Finder copies fail. The remote could not keep them anyway: the files live until
++// removed, or until the least recently used are dropped.
++package macmeta
++
++import (
++	"container/list"
++	"io"
++	"os"
++	"path"
++	"strings"
++	"sync"
++	"time"
++)
++
++// MaxFiles bounds the memory used: a ._ file holding a few attributes is around 4 KiB, a .DS_Store up to
++// a few tens of KiB.
++const MaxFiles = 4096
++
++// firstInode is far above the VFS inode counter, so file ids never collide.
++const firstInode = 1 << 62
++
++// Match reports whether p names a macOS metadata file.
++func Match(p string) bool {
++	name := path.Base(p)
++	return strings.HasPrefix(name, "._") || name == ".DS_Store"
++}
++
++// Store holds metadata files by path.
++type Store struct {
++	mu     sync.Mutex
++	byPath map[string]*list.Element
++	recent *list.List // of *file, most recently used first
++	next   uint64
++}
++
++type file struct {
++	path  string
++	data  []byte
++	mode  os.FileMode
++	mtime time.Time
++	inode uint64
++}
++
++// New makes an empty Store.
++func New() *Store {
++	return &Store{byPath: map[string]*list.Element{}, recent: list.New(), next: firstInode}
++}
++
++// get returns the file at p, marking it as recently used. Called with the lock held.
++func (s *Store) get(p string) *file {
++	element, ok := s.byPath[p]
++	if !ok {
++		return nil
++	}
++	s.recent.MoveToFront(element)
++	return element.Value.(*file)
++}
++
++// add stores f at its path, dropping the least recently used past MaxFiles. Called with the lock held.
++func (s *Store) add(f *file) {
++	if old, ok := s.byPath[f.path]; ok {
++		s.recent.Remove(old)
++	}
++	s.byPath[f.path] = s.recent.PushFront(f)
++	for s.recent.Len() > MaxFiles {
++		oldest := s.recent.Back()
++		s.recent.Remove(oldest)
++		delete(s.byPath, oldest.Value.(*file).path)
++	}
++}
++
++// Open opens the file at p with os.OpenFile flags, creating it with perm when O_CREATE is set.
++//
++// It returns os.ErrNotExist or os.ErrExist as os.OpenFile does.
++func (s *Store) Open(p string, flag int, perm os.FileMode) (*Handle, error) {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	f := s.get(p)
++	switch {
++	case f == nil && flag&os.O_CREATE == 0:
++		return nil, os.ErrNotExist
++	case f != nil && flag&os.O_CREATE != 0 && flag&os.O_EXCL != 0:
++		return nil, os.ErrExist
++	case f == nil:
++		s.next++
++		f = &file{path: p, mode: perm.Perm(), mtime: time.Now(), inode: s.next}
++		if f.mode == 0 {
++			f.mode = 0o644
++		}
++		s.add(f)
++	case flag&os.O_TRUNC != 0:
++		f.data = nil
++		f.mtime = time.Now()
++	}
++	h := &Handle{store: s, file: f}
++	if flag&os.O_APPEND != 0 {
++		h.offset = int64(len(f.data))
++	}
++	return h, nil
++}
++
++// Stat describes the file at p, or returns os.ErrNotExist.
++func (s *Store) Stat(p string) (*Info, error) {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	f := s.get(p)
++	if f == nil {
++		return nil, os.ErrNotExist
++	}
++	return f.info(), nil
++}
++
++// Remove deletes the file at p, or returns os.ErrNotExist.
++func (s *Store) Remove(p string) error {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	element, ok := s.byPath[p]
++	if !ok {
++		return os.ErrNotExist
++	}
++	s.recent.Remove(element)
++	delete(s.byPath, p)
++	return nil
++}
++
++// Rename moves the file at oldPath to newPath, replacing any file there, or returns os.ErrNotExist.
++func (s *Store) Rename(oldPath, newPath string) error {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	f := s.get(oldPath)
++	if f == nil {
++		return os.ErrNotExist
++	}
++	s.recent.Remove(s.byPath[oldPath])
++	delete(s.byPath, oldPath)
++	f.path = newPath
++	s.add(f)
++	return nil
++}
++
++// RemoveAll deletes the files under dir, once dir has been removed. Listings do not show them, so they
++// would otherwise outlive the directory and be found again in a new one of the same name.
++func (s *Store) RemoveAll(dir string) {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	s.removeAll(dir)
++}
++
++// removeAll deletes the files under dir. Called with the lock held.
++func (s *Store) removeAll(dir string) {
++	prefix := strings.TrimSuffix(dir, "/") + "/"
++	for p, element := range s.byPath {
++		if strings.HasPrefix(p, prefix) {
++			s.recent.Remove(element)
++			delete(s.byPath, p)
++		}
++	}
++}
++
++// RenameAll moves the files under oldDir to newDir, once oldDir has been renamed, replacing those there.
++func (s *Store) RenameAll(oldDir, newDir string) {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	oldPrefix := strings.TrimSuffix(oldDir, "/") + "/"
++	var moved []*file
++	for p, element := range s.byPath {
++		if strings.HasPrefix(p, oldPrefix) {
++			moved = append(moved, element.Value.(*file))
++			s.recent.Remove(element)
++			delete(s.byPath, p)
++		}
++	}
++	s.removeAll(newDir)
++	newPrefix := strings.TrimSuffix(newDir, "/") + "/"
++	for _, f := range moved {
++		f.path = newPrefix + strings.TrimPrefix(f.path, oldPrefix)
++		s.add(f)
++	}
++}
++
++// Chmod sets the permissions of the file at p, or returns os.ErrNotExist.
++func (s *Store) Chmod(p string, mode os.FileMode) error {
++	return s.change(p, func(f *file) { f.mode = mode.Perm() })
++}
++
++// Chtimes sets the modification time of the file at p, or returns os.ErrNotExist.
++func (s *Store) Chtimes(p string, mtime time.Time) error {
++	return s.change(p, func(f *file) { f.mtime = mtime })
++}
++
++func (s *Store) change(p string, apply func(f *file)) error {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	f := s.get(p)
++	if f == nil {
++		return os.ErrNotExist
++	}
++	apply(f)
++	return nil
++}
++
++// info snapshots f. Called with the lock held.
++func (f *file) info() *Info {
++	return &Info{name: path.Base(f.path), size: int64(len(f.data)), mode: f.mode, mtime: f.mtime, inode: f.inode}
++}
++
++// Info describes a file. It implements os.FileInfo.
++type Info struct {
++	name  string
++	size  int64
++	mode  os.FileMode
++	mtime time.Time
++	inode uint64
++}
++
++// Name returns the base name of the file.
++func (i *Info) Name() string { return i.name }
++
++// Size returns the length of the file in bytes.
++func (i *Info) Size() int64 { return i.size }
++
++// Mode returns the permissions of the file.
++func (i *Info) Mode() os.FileMode { return i.mode }
++
++// ModTime returns the modification time of the file.
++func (i *Info) ModTime() time.Time { return i.mtime }
++
++// IsDir returns false: the store only holds files.
++func (i *Info) IsDir() bool { return false }
++
++// Sys returns nil.
++func (i *Info) Sys() any { return nil }
++
++// Inode returns the file id, unique within the store and above the ids of the VFS.
++func (i *Info) Inode() uint64 { return i.inode }
++
++// Handle is an open file. Read, Write and Seek share an offset; ReadAt and WriteAt ignore it.
++type Handle struct {
++	store  *Store
++	file   *file
++	offset int64
++}
++
++// Stat describes the file, even once it has been removed.
++func (h *Handle) Stat() *Info {
++	h.store.mu.Lock()
++	defer h.store.mu.Unlock()
++	return h.file.info()
++}
++
++// Read reads from the offset, returning io.EOF at the end of the file.
++func (h *Handle) Read(p []byte) (int, error) {
++	n, err := h.ReadAt(p, h.offset)
++	h.offset += int64(n)
++	return n, err
++}
++
++// ReadAt reads at off, returning io.EOF when it reaches the end of the file.
++func (h *Handle) ReadAt(p []byte, off int64) (int, error) {
++	h.store.mu.Lock()
++	defer h.store.mu.Unlock()
++	if off >= int64(len(h.file.data)) {
++		return 0, io.EOF
++	}
++	n := copy(p, h.file.data[off:])
++	if n < len(p) {
++		return n, io.EOF
++	}
++	return n, nil
++}
++
++// Write writes at the offset, growing the file as needed.
++func (h *Handle) Write(p []byte) (int, error) {
++	n, err := h.WriteAt(p, h.offset)
++	h.offset += int64(n)
++	return n, err
++}
++
++// WriteAt writes at off, growing the file as needed.
++func (h *Handle) WriteAt(p []byte, off int64) (int, error) {
++	if off < 0 {
++		return 0, os.ErrInvalid
++	}
++	h.store.mu.Lock()
++	defer h.store.mu.Unlock()
++	end := off + int64(len(p))
++	if end > int64(len(h.file.data)) {
++		data := make([]byte, end)
++		copy(data, h.file.data)
++		h.file.data = data
++	}
++	copy(h.file.data[off:], p)
++	h.file.mtime = time.Now()
++	return len(p), nil
++}
++
++// Seek sets the offset used by Read and Write.
++func (h *Handle) Seek(offset int64, whence int) (int64, error) {
++	h.store.mu.Lock()
++	defer h.store.mu.Unlock()
++	switch whence {
++	case io.SeekStart:
++	case io.SeekCurrent:
++		offset += h.offset
++	case io.SeekEnd:
++		offset += int64(len(h.file.data))
++	default:
++		return h.offset, os.ErrInvalid
++	}
++	if offset < 0 {
++		return h.offset, os.ErrInvalid
++	}
++	h.offset = offset
++	return offset, nil
++}
++
++// Truncate sets the length of the file, padding it with zeros when it grows.
++func (h *Handle) Truncate(size int64) error {
++	if size < 0 {
++		return os.ErrInvalid
++	}
++	h.store.mu.Lock()
++	defer h.store.mu.Unlock()
++	data := make([]byte, size)
++	copy(data, h.file.data)
++	h.file.data = data
++	h.file.mtime = time.Now()
++	return nil
++}
++
++// Close does nothing: the file stays in the store until removed.
++func (h *Handle) Close() error { return nil }
+diff --git a/lib/macmeta/macmeta_test.go b/lib/macmeta/macmeta_test.go
+new file mode 100644
+index 0000000..30b1d2e
+--- /dev/null
++++ b/lib/macmeta/macmeta_test.go
+@@ -0,0 +1,113 @@
++package macmeta
++
++import (
++	"fmt"
++	"io"
++	"os"
++	"testing"
++	"time"
++
++	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++)
++
++func TestMatch(t *testing.T) {
++	for p, want := range map[string]bool{
++		"/._photo.jpg":    true,
++		"dir/._":          true,
++		"dir/.DS_Store":   true,
++		".DS_Store":       true,
++		"dir/photo.jpg":   false,
++		"._dir/photo.jpg": false,
++		"dir/.DS_Store2":  false,
++		"dir/_photo.jpg":  false,
++	} {
++		assert.Equal(t, want, Match(p), p)
++	}
++}
++
++func TestReadWriteAt(t *testing.T) {
++	s := New()
++	_, err := s.Open("/.DS_Store", os.O_RDWR, 0)
++	assert.ErrorIs(t, err, os.ErrNotExist)
++
++	h, err := s.Open("/.DS_Store", os.O_CREATE|os.O_WRONLY, 0)
++	require.NoError(t, err)
++	_, err = h.WriteAt([]byte("world"), 6)
++	require.NoError(t, err)
++	_, err = h.WriteAt([]byte("hello"), 0)
++	require.NoError(t, err)
++
++	got := make([]byte, 16)
++	n, err := h.ReadAt(got, 0)
++	assert.Equal(t, io.EOF, err)
++	assert.Equal(t, "hello\x00world", string(got[:n]))
++	info := h.Stat()
++	assert.Equal(t, int64(11), info.Size())
++	assert.Equal(t, os.FileMode(0o644), info.Mode())
++
++	mtime := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
++	require.NoError(t, s.Chtimes("/.DS_Store", mtime))
++	info, err = s.Stat("/.DS_Store")
++	require.NoError(t, err)
++	assert.Equal(t, mtime, info.ModTime())
++
++	appended, err := s.Open("/.DS_Store", os.O_WRONLY|os.O_APPEND, 0)
++	require.NoError(t, err)
++	_, err = appended.Write([]byte("!"))
++	require.NoError(t, err)
++	truncated, err := s.Open("/.DS_Store", os.O_RDWR|os.O_TRUNC, 0)
++	require.NoError(t, err)
++	assert.Equal(t, int64(0), truncated.Stat().Size())
++
++	require.NoError(t, s.Remove("/.DS_Store"))
++	_, err = s.Stat("/.DS_Store")
++	assert.ErrorIs(t, err, os.ErrNotExist)
++	// An open handle outlives the removal.
++	assert.Equal(t, int64(0), h.Stat().Size())
++}
++
++func TestDropLeastRecentlyUsed(t *testing.T) {
++	s := New()
++	for i := range MaxFiles + 1 {
++		_, err := s.Open(fmt.Sprintf("/._%d", i), os.O_CREATE|os.O_RDWR, 0o644)
++		require.NoError(t, err)
++		if i == 0 {
++			continue
++		}
++		// Keep the first file in use, so the second is the least recently used.
++		_, err = s.Stat("/._0")
++		require.NoError(t, err)
++	}
++	_, err := s.Stat("/._0")
++	assert.NoError(t, err)
++	_, err = s.Stat("/._1")
++	assert.ErrorIs(t, err, os.ErrNotExist)
++	assert.Equal(t, MaxFiles, s.recent.Len())
++}
++
++func TestDirectories(t *testing.T) {
++	s := New()
++	for _, p := range []string{"/a/.DS_Store", "/a/b/._f", "/ab/.DS_Store", "/c/.DS_Store", "/._a"} {
++		_, err := s.Open(p, os.O_CREATE|os.O_RDWR, 0)
++		require.NoError(t, err)
++	}
++	exists := func(p string) bool {
++		_, err := s.Stat(p)
++		return err == nil
++	}
++
++	s.RenameAll("/a", "/c")
++	assert.False(t, exists("/a/.DS_Store"))
++	assert.True(t, exists("/c/.DS_Store"))
++	assert.True(t, exists("/c/b/._f"))
++	assert.True(t, exists("/ab/.DS_Store"))
++	assert.Equal(t, 4, s.recent.Len())
++
++	s.RemoveAll("/c")
++	assert.False(t, exists("/c/.DS_Store"))
++	assert.False(t, exists("/c/b/._f"))
++	assert.True(t, exists("/ab/.DS_Store"))
++	assert.True(t, exists("/._a"))
++	assert.Equal(t, 2, s.recent.Len())
++}
