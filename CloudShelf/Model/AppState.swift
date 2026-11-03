@@ -15,6 +15,7 @@ final class AppState {
         case edit(drive: String)
         case log(drive: String)
         case options(drive: String)
+        case googleKey(drive: String)
         case alert(Alert)
         case notes
         case about

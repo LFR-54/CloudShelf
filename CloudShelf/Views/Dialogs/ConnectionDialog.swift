@@ -44,6 +44,12 @@ struct ConnectionDialog: View {
         }
         .task(load)
         .onChange(of: draft) { test = .idle }
+        .onChange(of: draft.client) {
+            // A token obtained with another key would not refresh.
+            draft.token = nil
+            draft.authorizedAccount = nil
+            errors[.client] = nil
+        }
         .onDisappear { signIn?.cancel() }
     }
 
@@ -113,6 +119,7 @@ struct ConnectionDialog: View {
     @ViewBuilder private var fields: some View {
         switch provider.kind {
         case .oauth:
+            if provider.type == "drive" && editing == nil { googleKey }
             row("Compte", error: errors[.signIn]) {
                 if draft.token != nil || (editing != nil && draft.authorizedAccount != nil) {
                     HStack(spacing: 10) {
@@ -188,6 +195,24 @@ struct ConnectionDialog: View {
             }
             check("Anonyme", $draft.anonymous)
                 .padding(.leading, 142)
+        }
+    }
+
+    /// Before the sign-in, since the token must come from the key the drive keeps.
+    @ViewBuilder private var googleKey: some View {
+        check("Utiliser ma propre clé Google", Binding { draft.client != nil } set: { draft.client = $0 ? OAuthClient() : nil })
+            .padding(.leading, 142)
+            .padding(.top, -4)
+            .padding(.bottom, draft.client == nil ? 6 : 4)
+        if draft.client != nil {
+            VStack(alignment: .leading, spacing: 0) {
+                GoogleKeyFields(client: Binding { draft.client ?? OAuthClient() } set: { draft.client = $0 },
+                                labelWidth: 130, invalid: errors[.client] != nil) { errors[.client] = $0 }
+                if let error = errors[.client] {
+                    FieldError(message: error).padding(.leading, 142)
+                }
+            }
+            .padding(.bottom, 12)
         }
     }
 
@@ -348,9 +373,14 @@ struct ConnectionDialog: View {
 
     private func startSignIn() {
         errors[.signIn] = nil
+        if let error = draft.client?.googleError {
+            errors[.client] = error
+            return
+        }
         signIn = Task {
             do {
-                let (token, account) = try await store.authorize(provider)
+                let client = if let editing { await store.storedClient(editing) } else { draft.client?.trimmed }
+                let (token, account) = try await store.authorize(provider, client: client)
                 draft.token = token
                 draft.authorizedAccount = account ?? "Compte \(provider.name)"
             } catch is CancellationError {

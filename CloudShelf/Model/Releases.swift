@@ -44,7 +44,8 @@ struct Release: Identifiable {
                 Note(text: "Panneau dans la barre des menus : débit de la dernière minute, lecteurs et envois en cours"),
                 Note(text: "Ajout de lecteur : Dropbox, Google Drive, OneDrive, Box, MEGA, Proton Drive, S3, WebDAV, SFTP, FTP et SMB"),
                 Note(text: "Fiche lecteur : profil, cache, limite de débit, test de débit et journal"),
-                Note(text: "Renommer, dupliquer ou supprimer un lecteur depuis la liste ou sa fiche")
+                Note(text: "Renommer, dupliquer ou supprimer un lecteur depuis la liste ou sa fiche"),
+                Note(text: "Google Drive avec votre propre clé Google, saisie ou importée depuis son fichier JSON")
             ],
             .improved: [
                 Note(text: "Avec macFUSE, les fichiers lus ne passent plus par le disque : regarder une vidéo n'occupe aucun cache", bold: true),
@@ -60,6 +61,9 @@ struct Release: Identifiable {
                 Note(text: "Un montage resté actif après l'arrêt brutal de rclone bloquait le Finder"),
                 Note(text: "Le dossier d'un lecteur démonté restait dans ~/Cloud"),
                 Note(text: "Changer de service dans la fenêtre d'ajout la fermait puis la rouvrait"),
+                Note(text: "Un montage Google Drive freiné par Google échouait au bout de 30 secondes au lieu d'attendre rclone"),
+                Note(text: "Copier un fichier téléchargé ou tagué sur un lecteur macFUSE échouait avec « Operation not permitted »"),
+                Note(text: "Un réglage qui demande un remontage n'était appliqué qu'au montage suivant"),
                 Note(text: "Les séparateurs du panneau de la barre des menus disparaissaient sur un fond sombre")
             ]
         ])

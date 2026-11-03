@@ -111,12 +111,13 @@ flowchart LR
 
 ### Le moteur rclone modifié
 
-CloudShelf embarque rclone 1.75.2 avec deux correctifs, dans [`rclone-patches/`](rclone-patches) :
+CloudShelf embarque rclone 1.75.2 avec trois correctifs, dans [`rclone-patches/`](rclone-patches) :
 
 | Correctif | Rôle |
 | --- | --- |
 | [**Connexions partagées**](rclone-patches/0001-vfs-shared-read-streams.patch) | Ajoute `--vfs-read-chunk-streams-total`, un budget de connexions partagé par tous les fichiers ouverts. Une lecture démarre avec 4 connexions et en prend davantage tant qu'elle attend le réseau. |
 | [**Octets reçus**](rclone-patches/0002-core-downloaded.patch) | Ajoute l'appel rc `core/downloaded`, qui compte les octets reçus du réseau. `core/stats` ne les compte qu'une fois lus par l'app, ce que macFUSE fait par paquets de plusieurs centaines de mégaoctets. |
+| [**Attributs macOS**](rclone-patches/0003-cmount-discard-xattrs-macos.patch) | Accepte les attributs étendus sans les garder, comme le cloud. Sinon macOS les range dans des fichiers `._`, que le montage interdit, et la copie d'un fichier téléchargé ou tagué échoue avec « Operation not permitted ». |
 
 ## Compiler
 
@@ -136,7 +137,13 @@ open build/DerivedData/Build/Products/Release/CloudShelf.app
 
 ## Google Drive : utilisez votre propre clé
 
-rclone se connecte par défaut à Google Drive avec une clé partagée par tous ses utilisateurs. Google limite souvent cette clé, ce qui ralentit le montage et la navigation, et rclone annonce son retrait courant 2026. Avec votre propre clé, gratuite, vous avez votre propre quota : suivez le [guide de rclone](https://rclone.org/drive/#making-your-own-client-id).
+rclone se connecte par défaut à Google Drive avec une clé partagée par tous ses utilisateurs. Google limite souvent cette clé, ce qui ralentit le montage et la navigation, et rclone annonce son retrait courant 2026. Avec votre propre clé, gratuite, vous avez votre propre quota.
+
+1. Créez un client OAuth de type « Application de bureau » dans Google Cloud, en suivant le [guide de rclone](https://rclone.org/drive/#making-your-own-client-id), puis publiez l'application pour que l'accès ne soit pas coupé au bout de 7 jours.
+2. Dans CloudShelf, ouvrez la fiche du lecteur, puis **Clé Google › Utiliser ma clé…**. Collez l'ID client et le code secret, ou importez le fichier JSON téléchargé à la création du client.
+3. Autorisez CloudShelf dans le navigateur. Le lecteur est remonté avec la nouvelle clé.
+
+Pour un nouveau lecteur, cochez « Utiliser ma propre clé Google » avant de vous connecter.
 
 ## Confidentialité
 

@@ -62,9 +62,9 @@ struct Rclone: Sendable {
         _ = try await run(["config", "delete", name])
     }
 
-    /// Opens the browser to authorize an OAuth backend and returns the token JSON.
-    func authorize(_ type: String) async throws -> String {
-        let output = try await run(["authorize", type])
+    /// Opens the browser to authorize an OAuth backend and returns the token JSON; without a client, with rclone's own key.
+    func authorize(_ type: String, client: OAuthClient? = nil) async throws -> String {
+        let output = try await run(["authorize", type] + (client.map { [$0.id, $0.secret] } ?? []))
         guard let start = output.range(of: "--->"), let end = output.range(of: "<---End paste") else {
             throw RcloneError.command("L'autorisation n'a pas renvoyé de jeton.")
         }
@@ -227,7 +227,7 @@ enum RcloneLog {
     static func explain(_ message: String) -> String {
         guard message.contains("Quota exceeded") || message.contains("rateLimitExceeded") else { return message }
         return message.contains("202264815644")
-            ? "Google refuse les requêtes : la clé partagée de rclone a dépassé son quota. Réessayez dans quelques minutes."
+            ? "Google refuse les requêtes : la clé partagée de rclone a dépassé son quota. Réessayez plus tard, ou utilisez votre propre clé dans la fiche du lecteur."
             : "Google refuse les requêtes : quota dépassé. Réessayez dans quelques minutes."
     }
 

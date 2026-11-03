@@ -3,13 +3,15 @@ import Foundation
 /// The add and edit dialog's form, turned into rclone parameters.
 struct ConnectionDraft: Equatable {
     enum Field: Hashable {
-        case name, signIn, email, password, endpoint, bucket, accessKey, secretKey, address, encryptionPassword
+        case name, client, signIn, email, password, endpoint, bucket, accessKey, secretKey, address, encryptionPassword
     }
 
     var provider: Provider
     var name: String
     var token: String?
     var authorizedAccount: String?
+    /// The user's own app key for a new OAuth drive; the token must come from it.
+    var client: OAuthClient?
     var email = ""
     var password = ""
     var twoFactor = ""
@@ -69,7 +71,7 @@ struct ConnectionDraft: Equatable {
         let values: [String: String]
         switch provider.kind {
         case .oauth:
-            values = ["token": token ?? ""]
+            values = ["token": token ?? "", "client_id": client?.trimmed.id ?? "", "client_secret": client?.trimmed.secret ?? ""]
         case .login:
             values = provider.type == "mega"
                 ? ["user": email, "pass": password, "2fa": twoFactor]
@@ -136,6 +138,7 @@ struct ConnectionDraft: Equatable {
         }
         switch provider.kind {
         case .oauth:
+            if let error = client?.googleError { errors[.client] = error }
             if token == nil && !editing { errors[.signIn] = "Connectez-vous à \(provider.name) pour continuer." }
         case .login:
             require(email, .email, "Saisissez l'adresse e-mail.")

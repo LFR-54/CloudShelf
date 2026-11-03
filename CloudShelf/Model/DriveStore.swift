@@ -227,7 +227,7 @@ final class DriveStore {
     }
 
     /// Stops the drive, applies a change while nothing is mounted, then mounts it again if it was.
-    private func remount(_ drive: Drive, change: () -> Void = {}) async {
+    func remount(_ drive: Drive, change: () -> Void = {}) async {
         let wasMounted = sessions[drive.id] != nil
         if wasMounted {
             unmount(drive)
@@ -265,7 +265,7 @@ final class DriveStore {
     private func slowMountNotice(_ drive: Drive) async -> String {
         let config = drive.provider.type == "drive" ? (try? await rclone?.dump())?[drive.remote] : nil
         return config?["client_id", default: ""].isEmpty == true
-            ? "Google limite la clé partagée de rclone. rclone réessaie, ce qui peut prendre deux minutes."
+            ? "Google limite la clé partagée de rclone, nouvelle tentative en cours. Votre propre clé, dans la fiche du lecteur, évite cette attente."
             : "Le serveur tarde à répondre. rclone réessaie, ce qui peut prendre deux minutes."
     }
 
@@ -528,10 +528,30 @@ final class DriveStore {
     // MARK: Connections
 
     /// Opens the browser to authorize the service and returns the token with the account it belongs to.
-    func authorize(_ provider: Provider) async throws -> (token: String, account: String?) {
+    /// A token only refreshes with the key that obtained it, so `client` must be the one the remote keeps.
+    func authorize(_ provider: Provider, client: OAuthClient? = nil) async throws -> (token: String, account: String?) {
         guard let rclone else { throw RcloneError.notFound }
-        let token = try await rclone.authorize(provider.type)
+        let token = try await rclone.authorize(provider.type, client: client)
         return (token, await AccountLookup.email(type: provider.type, token: token))
+    }
+
+    /// The user's own app key on the remote behind a drive, nil for rclone's shared one.
+    func storedClient(_ drive: Drive) async -> OAuthClient? {
+        guard let stored = try? await rclone?.dump()[baseRemote(drive)] else { return nil }
+        return OAuthClient(stored: stored)
+    }
+
+    /// Signs in again with another app key, or rclone's shared one when nil, then stores the key with the new token
+    /// and remounts; nothing changes if the sign-in fails.
+    func setClient(_ drive: Drive, _ client: OAuthClient?) async throws -> String {
+        guard let rclone else { throw RcloneError.notFound }
+        let (token, account) = try await authorize(drive.provider, client: client)
+        try await rclone.configure(baseRemote(drive), parameters: ["client_id": client?.id ?? "", "client_secret": client?.secret ?? "", "token": token])
+        await remount(drive) {
+            if let account { drive.record.account = account }
+        }
+        save()
+        return drive.account
     }
 
     /// Non-secret parameters of the remote behind a drive, to prefill the edit dialog.
@@ -610,7 +630,7 @@ final class DriveStore {
     /// Authorizes again in the browser and remounts with the new token.
     func reconnect(_ drive: Drive) async throws -> String {
         guard let rclone else { throw RcloneError.notFound }
-        let (token, account) = try await authorize(drive.provider)
+        let (token, account) = try await authorize(drive.provider, client: await storedClient(drive))
         try await rclone.configure(baseRemote(drive), parameters: ["token": token])
         await remount(drive) {
             if let account { drive.record.account = account }

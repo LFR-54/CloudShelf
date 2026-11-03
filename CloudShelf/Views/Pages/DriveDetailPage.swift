@@ -8,6 +8,8 @@ struct DriveDetailPage: View {
     @State private var name = ""
     @State private var nameError: String?
     @FocusState private var nameFocused: Bool
+    /// The user's own Google key, read again whenever a dialog closes.
+    @State private var clientID: String?
 
     var body: some View {
         let actions = DriveActions(store: store, app: app)
@@ -56,6 +58,13 @@ struct DriveDetailPage: View {
                         }
                         .buttonStyle(PushButtonStyle())
                     }
+                    if drive.provider.type == "drive" {
+                        SettingsRow("Clé Google", hint: clientID.map { "Votre propre clé (\($0.prefix(12))…), avec son propre quota chez Google." }
+                                        ?? "Clé partagée de rclone, que Google limite souvent. Votre propre clé a son propre quota.") {
+                            Button(clientID == nil ? "Utiliser ma clé…" : "Modifier…") { app.overlay = .googleKey(drive: drive.id) }
+                                .buttonStyle(PushButtonStyle())
+                        }
+                    }
                 }
                 SectionTitle(text: "Performance")
                 SettingsGroup {
@@ -88,7 +97,7 @@ struct DriveDetailPage: View {
                     SettingsRow("Reconnecter automatiquement", hint: "Remonte le lecteur si rclone s'arrête de façon inattendue.") {
                         SwitchToggle(isOn: setting(\.autoReconnect), label: "Reconnecter automatiquement")
                     }
-                    SettingsRow("Lecture seule", hint: nil as String?) {
+                    SettingsRow("Lecture seule", hint: drive.settings.readOnly ? "Rien ne peut être créé, modifié ni supprimé sur ce lecteur." : nil) {
                         SwitchToggle(isOn: setting(\.readOnly, remount: true), label: "Lecture seule")
                     }
                     SettingsRow("Bloquer les fichiers macOS", hint: "Les .DS_Store et fichiers ._ sont masqués et ne sont pas envoyés dans le cloud.") {
@@ -124,6 +133,10 @@ struct DriveDetailPage: View {
         .onAppear { name = drive.name }
         .onChange(of: drive.name) { _, newName in if !nameFocused { name = newName } }
         .onChange(of: app.nameFieldRequest) { nameFocused = true }
+        .task(id: app.overlay == nil) {
+            guard drive.provider.type == "drive", app.overlay == nil else { return }
+            clientID = await store.storedClient(drive)?.id
+        }
     }
 
     private var stats: some View {
@@ -199,14 +212,19 @@ struct DriveDetailPage: View {
         .frame(minHeight: 40)
     }
 
-    /// A binding to one setting; changes that need a remount say so when the drive is mounted.
+    /// A binding to one setting; a mounted drive is remounted right away for those rclone only reads at mount time.
     private func setting<Value: Equatable>(_ keyPath: WritableKeyPath<DriveSettings, Value>, remount: Bool = false) -> Binding<Value> {
         Binding {
             drive.settings[keyPath: keyPath]
         } set: { value in
             guard value != drive.settings[keyPath: keyPath] else { return }
             store.update(drive) { $0[keyPath: keyPath] = value }
-            if remount, store.appliesLater(drive) { app.show("Pris en compte au prochain montage de « \(drive.name) »") }
+            if remount, store.appliesLater(drive) {
+                Task {
+                    await store.remount(drive)
+                    app.show("« \(drive.name) » remonté avec le nouveau réglage")
+                }
+            }
         }
     }
 

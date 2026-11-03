@@ -34,6 +34,8 @@ struct DialogHost: View {
             if let drive = store.drive(id) { LogDialog(drive: drive) }
         case .options(let id):
             if let drive = store.drive(id) { OptionsDialog(drive: drive) }
+        case .googleKey(let id):
+            if let drive = store.drive(id) { GoogleKeyDialog(drive: drive) }
         case .add(let provider):
             ConnectionDialog(provider: Provider.named(provider), editing: nil)
         case .edit(let id):
@@ -261,6 +263,10 @@ struct OptionsDialog: View {
         app.overlay = nil
         guard value != drive.settings.extraOptions else { return }
         store.update(drive) { $0.extraOptions = value }
-        app.show(store.appliesLater(drive) ? "Options prises en compte au prochain montage" : "Options enregistrées")
+        guard store.appliesLater(drive) else { return app.show("Options enregistrées") }
+        Task {
+            await store.remount(drive)
+            app.show("« \(drive.name) » remonté avec les nouvelles options")
+        }
     }
 }
