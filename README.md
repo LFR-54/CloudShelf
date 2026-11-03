@@ -41,14 +41,14 @@ CloudShelf transforme chaque compte en ligne en un lecteur du Finder, comme RaiD
 
 <table>
   <tr>
-    <td width="50%">
+    <td width="50%" valign="top">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="docs/images/detail-dark.png">
         <img src="docs/images/detail-light.png" alt="Fiche d'un lecteur : débit, cache, espace libre et réglages">
       </picture>
       <p align="center"><b>Fiche du lecteur</b><br><sub>Profil, cache, limite de débit, méthode de montage</sub></p>
     </td>
-    <td width="50%">
+    <td width="50%" valign="top">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="docs/images/activity-dark.png">
         <img src="docs/images/activity-light.png" alt="Page Activité : débit des 60 dernières secondes et envois en cours">
@@ -57,14 +57,14 @@ CloudShelf transforme chaque compte en ligne en un lecteur du Finder, comme RaiD
     </td>
   </tr>
   <tr>
-    <td width="50%">
+    <td width="50%" valign="top">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="docs/images/add-dark.png">
         <img src="docs/images/add-light.png" alt="Ajout d'un lecteur : liste des services et options">
       </picture>
       <p align="center"><b>Ajout d'un lecteur</b><br><sub>Connexion par le navigateur pour les services OAuth</sub></p>
     </td>
-    <td width="50%" align="center">
+    <td width="50%" align="center" valign="top">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="docs/images/panel-dark.png">
         <img src="docs/images/panel-light.png" width="300" alt="Panneau de la barre des menus avec le graphique de débit">
@@ -100,12 +100,8 @@ Dropbox accepte environ 16 téléchargements simultanés par compte et refuse ou
 
 ```mermaid
 flowchart LR
-    Finder["Finder, Emby, Plex…"] -- "macFUSE ou NFS" --> Mount
-    App["CloudShelf (SwiftUI)"] -- "lance et surveille" --> Mount
-    App -. "API rc : débit, envois, cache" .-> Mount
-    subgraph Mount["rclone mount, un processus par lecteur"]
-        VFS["Cache VFS du lecteur"]
-    end
+    Finder["Finder, Emby, Plex"] -- "macFUSE ou NFS" --> Mount["rclone mount<br>un processus par lecteur"]
+    App["CloudShelf"] -- "lance et surveille par l'API rc" --> Mount
     Mount -- HTTPS --> Cloud[("Dropbox, Google Drive, S3…")]
 ```
 
@@ -119,8 +115,8 @@ CloudShelf embarque rclone 1.75.2 avec deux correctifs, dans [`rclone-patches/`]
 
 | Correctif | Rôle |
 | --- | --- |
-| [`0001-vfs-shared-read-streams`](rclone-patches/0001-vfs-shared-read-streams.patch) | Ajoute `--vfs-read-chunk-streams-total`, un budget de connexions partagé par tous les fichiers ouverts. Une lecture démarre avec 4 connexions et en prend davantage tant qu'elle attend le réseau. |
-| [`0002-core-downloaded`](rclone-patches/0002-core-downloaded.patch) | Ajoute l'appel rc `core/downloaded`, qui compte les octets reçus du réseau. `core/stats` ne les compte qu'une fois lus par l'app, ce que macFUSE fait par paquets de plusieurs centaines de mégaoctets. |
+| [**Connexions partagées**](rclone-patches/0001-vfs-shared-read-streams.patch) | Ajoute `--vfs-read-chunk-streams-total`, un budget de connexions partagé par tous les fichiers ouverts. Une lecture démarre avec 4 connexions et en prend davantage tant qu'elle attend le réseau. |
+| [**Octets reçus**](rclone-patches/0002-core-downloaded.patch) | Ajoute l'appel rc `core/downloaded`, qui compte les octets reçus du réseau. `core/stats` ne les compte qu'une fois lus par l'app, ce que macFUSE fait par paquets de plusieurs centaines de mégaoctets. |
 
 ## Compiler
 
