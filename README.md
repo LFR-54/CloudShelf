@@ -111,13 +111,14 @@ flowchart LR
 
 ### Le moteur rclone modifié
 
-CloudShelf embarque rclone 1.75.2 avec trois correctifs, dans [`rclone-patches/`](rclone-patches) :
+CloudShelf embarque rclone 1.75.2 avec quatre correctifs, dans [`rclone-patches/`](rclone-patches) :
 
 | Correctif | Rôle |
 | --- | --- |
 | [**Connexions partagées**](rclone-patches/0001-vfs-shared-read-streams.patch) | Ajoute `--vfs-read-chunk-streams-total`, un budget de connexions partagé par tous les fichiers ouverts. Une lecture démarre avec 4 connexions et en prend davantage tant qu'elle attend le réseau. |
 | [**Octets reçus**](rclone-patches/0002-core-downloaded.patch) | Ajoute l'appel rc `core/downloaded`, qui compte les octets reçus du réseau. `core/stats` ne les compte qu'une fois lus par l'app, ce que macFUSE fait par paquets de plusieurs centaines de mégaoctets. |
 | [**Attributs macOS**](rclone-patches/0003-cmount-discard-xattrs-macos.patch) | Accepte les attributs étendus sans les garder, comme le cloud. Sinon macOS les range dans des fichiers `._`, que le montage interdit, et la copie d'un fichier téléchargé ou tagué échoue avec « Operation not permitted ». |
+| [**Fichiers `._` en NFS**](rclone-patches/0004-serve-nfs-appledouble-in-memory.patch) | En NFS, macOS range les attributs dans des fichiers `._`. Quand les filtres les excluent, le serveur NFS les garde en mémoire au lieu de les envoyer au cloud. CloudShelf monte aussi en NFS avec des verrous locaux, sans lesquels macOS refuse d'écrire ces fichiers. |
 
 ## Compiler
 

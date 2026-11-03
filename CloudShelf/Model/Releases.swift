@@ -62,7 +62,7 @@ struct Release: Identifiable {
                 Note(text: "Le dossier d'un lecteur démonté restait dans ~/Cloud"),
                 Note(text: "Changer de service dans la fenêtre d'ajout la fermait puis la rouvrait"),
                 Note(text: "Un montage Google Drive freiné par Google échouait au bout de 30 secondes au lieu d'attendre rclone"),
-                Note(text: "Copier un fichier téléchargé ou tagué sur un lecteur macFUSE échouait avec « Operation not permitted »"),
+                Note(text: "Copier un fichier téléchargé ou tagué sur un lecteur échouait avec « Operation not permitted », et pouvait laisser un fichier vide en NFS"),
                 Note(text: "Un réglage qui demande un remontage n'était appliqué qu'au montage suivant"),
                 Note(text: "Les séparateurs du panneau de la barre des menus disparaissaient sur un fond sombre")
             ]
