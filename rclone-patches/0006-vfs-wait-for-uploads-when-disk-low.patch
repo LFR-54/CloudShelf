@@ -1,0 +1,67 @@
+diff --git a/vfs/vfscache/cache.go b/vfs/vfscache/cache.go
+index ca79f22..ad5ad16 100644
+--- a/vfs/vfscache/cache.go
++++ b/vfs/vfscache/cache.go
+@@ -12,6 +12,7 @@ import (
+ 	"sort"
+ 	"strings"
+ 	"sync"
++	"sync/atomic"
+ 	"time"
+ 
+ 	"github.com/rclone/rclone/fs"
+@@ -63,8 +64,12 @@ type Cache struct {
+ 	kickerMu      sync.Mutex       // mutex for cleanerKicked
+ 	kick          chan struct{}    // channel for kicking clear to start
+ 
++	spaceOKUntil atomic.Int64 // unix nanoseconds until which writes skip checking the free space
+ }
+ 
++// spaceWait bounds how long WaitForSpace holds a write: macFUSE gives up on a request after 60 seconds.
++const spaceWait = 10 * time.Second
++
+ // AddVirtualFn if registered by the WithAddVirtual method, can be
+ // called to register the object or directory at remote as a virtual
+ // entry in directory listings.
+@@ -562,6 +567,29 @@ func (c *Cache) reload(ctx context.Context) error {
+ 	return nil
+ }
+ 
++// WaitForSpace holds a write while the disk of the cache has less than --vfs-cache-min-free-space available
++// and uploads are pending, removing each file once sent, so that writes slow down to the upload speed
++// instead of filling the disk.
++//
++// It returns at once when no upload is pending, as the file being written is only sent once closed, and
++// after spaceWait, so the write goes ahead and the next one waits again.
++func (c *Cache) WaitForSpace() {
++	if c.opt.CacheMinFreeSpace <= 0 || time.Now().UnixNano() < c.spaceOKUntil.Load() {
++		return
++	}
++	deadline := time.Now().Add(spaceWait)
++	for !c.minFreeSpaceQuotaOK() {
++		if inProgress, queued := c.writeback.Stats(); inProgress+queued == 0 || time.Now().After(deadline) {
++			return
++		}
++		// The cleaner would only remove the files sent since at its next pass.
++		c.purgeOverQuota()
++		time.Sleep(100 * time.Millisecond)
++	}
++	// Checking at most every 100 ms keeps statfs out of most writes.
++	c.spaceOKUntil.Store(time.Now().Add(100 * time.Millisecond).UnixNano())
++}
++
+ // KickCleaner kicks cache cleaner upon out of space situation
+ //
+ // This does nothing when the cleaner is disabled. Only the cleaner clears the
+diff --git a/vfs/vfscache/item.go b/vfs/vfscache/item.go
+index f25f907..556d014 100644
+--- a/vfs/vfscache/item.go
++++ b/vfs/vfscache/item.go
+@@ -1429,6 +1429,7 @@ func (item *Item) readAt(b []byte, off int64) (n int, err error) {
+ 
+ // WriteAt bytes to the file at off
+ func (item *Item) WriteAt(b []byte, off int64) (n int, err error) {
++	item.c.WaitForSpace()
+ 	item.preAccess()
+ 	defer item.postAccess()
+ 	item.mu.Lock()

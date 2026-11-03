@@ -113,7 +113,7 @@ flowchart LR
 
 ### Le moteur rclone modifié
 
-CloudShelf embarque rclone 1.75.2 avec cinq correctifs, dans [`rclone-patches/`](rclone-patches) :
+CloudShelf embarque rclone 1.75.2 avec six correctifs, dans [`rclone-patches/`](rclone-patches) :
 
 | Correctif | Rôle |
 | --- | --- |
@@ -122,6 +122,7 @@ CloudShelf embarque rclone 1.75.2 avec cinq correctifs, dans [`rclone-patches/`]
 | [**Attributs macOS**](rclone-patches/0003-cmount-discard-xattrs-macos.patch) | Accepte les attributs étendus sans les garder, comme le cloud. Sinon macOS les range dans des fichiers `._`, que le montage interdit, et la copie d'un fichier téléchargé ou tagué échoue avec « Operation not permitted ». |
 | [**Fichiers `._` et `.DS_Store` en NFS**](rclone-patches/0004-serve-nfs-macos-files-in-memory.patch) | En NFS, macOS range les attributs dans des fichiers `._`, et le Finder écrit des `.DS_Store`. Quand les filtres les excluent, le serveur NFS les garde en mémoire au lieu de les envoyer au cloud. CloudShelf monte aussi en NFS avec des verrous locaux, sans lesquels macOS refuse d'écrire les fichiers `._`. |
 | [**Fichiers `._` et `.DS_Store` avec macFUSE**](rclone-patches/0005-cmount-macos-files-in-memory.patch) | L'option `noappledouble` de macFUSE refuse de créer ces fichiers, et le Finder abandonne alors la copie de tout dossier qui contient un `.DS_Store` (erreur -8062). rclone les garde en mémoire à la place de macFUSE, sans les montrer dans les listes ni les envoyer au cloud. |
+| [**Écritures sur un disque presque plein**](rclone-patches/0006-vfs-wait-for-uploads-when-disk-low.patch) | Les fichiers écrits passent par le cache local avant d'être envoyés. Le Finder écrit plus vite que la connexion n'envoie, et une grosse copie remplissait le disque, puis échouait (erreur -36). Sous `--vfs-cache-min-free-space`, chaque écriture attend que les envois en cours libèrent de la place, 10 s au plus : la copie ralentit à la vitesse d'envoi au lieu d'échouer. |
 
 ## Compiler
 

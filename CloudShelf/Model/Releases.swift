@@ -66,6 +66,7 @@ struct Release: Identifiable {
                 Note(text: "Copier un fichier téléchargé ou tagué sur un lecteur échouait avec « Operation not permitted », et pouvait laisser un fichier vide en NFS"),
                 Note(text: "Copier un dossier avec le Finder échouait avec l'erreur -8062 et laissait la copie incomplète"),
                 Note(text: "Après avoir quitté l'app, remonter un lecteur macFUSE pouvait échouer avec « Resource busy »"),
+                Note(text: "Une grosse copie vers un lecteur pouvait remplir le disque du Mac et échouer avec l'erreur -36 : elle ralentit désormais à la vitesse d'envoi"),
                 Note(text: "Un réglage qui demande un remontage n'était appliqué qu'au montage suivant"),
                 Note(text: "Les séparateurs du panneau de la barre des menus disparaissaient sur un fond sombre")
             ]

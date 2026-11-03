@@ -732,7 +732,10 @@ final class DriveStore {
     /// still waiting to be uploaded, which nothing may delete.
     private func protectDisk() async {
         guard let free = DiskSpace.available(at: FileManager.default.homeDirectoryForCurrentUser), free < DiskSpace.floor else { return }
-        let candidates = drives.filter(\.isMounted).map { drive in (drive, drive.cacheBytes - pendingUploads(drive).bytes) }
+        // A drive still sending files is left alone: remounting it would break the copy writing them, and rclone
+        // removes what it has sent itself, holding writes until there is room.
+        let candidates = drives.filter { $0.isMounted && $0.pendingUploads == 0 }
+            .map { drive in (drive, drive.cacheBytes - pendingUploads(drive).bytes) }
         guard let (drive, freeable) = candidates.max(by: { $0.1 < $1.1 }), freeable >= 1_000_000_000 else {
             if !warnedDiskFull, drives.contains(where: { $0.pendingUploads > 0 }) {
                 warnedDiskFull = true
