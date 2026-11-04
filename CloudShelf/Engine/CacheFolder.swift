@@ -21,32 +21,40 @@ enum CacheFolder {
         return pending
     }
 
-    /// Deletes everything but the files waiting to be uploaded, and returns those.
+    /// The Finder tags of the drive's files, which the bundled rclone keeps here (rclone-patches): the remote has
+    /// nowhere to keep them, so they exist only in this folder.
+    static let finderTags = "finderMeta"
+
+    /// Deletes everything but the files waiting to be uploaded, which it returns, and the Finder tags.
     @discardableResult
     static func purge(_ folder: URL) -> Pending {
+        let manager = FileManager.default
         let keep = dirty(in: folder)
-        guard !keep.isEmpty else {
-            try? FileManager.default.removeItem(at: folder)
-            return Pending()
+        for item in (try? manager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? [] {
+            let name = item.lastPathComponent
+            if name != finderTags, keep.isEmpty || !["vfs", "vfsMeta"].contains(name) { try? manager.removeItem(at: item) }
         }
-        for root in ["vfs", "vfsMeta"] {
-            for file in files(under: folder.appending(path: root)) where keep[file.relative] == nil {
-                try? FileManager.default.removeItem(at: file.url)
+        if !keep.isEmpty {
+            for root in ["vfs", "vfsMeta"] {
+                for file in files(under: folder.appending(path: root)) where keep[file.relative] == nil {
+                    try? manager.removeItem(at: file.url)
+                }
             }
         }
         removeEmptyFolders(in: folder)
+        if (try? manager.contentsOfDirectory(atPath: folder.path))?.isEmpty == true { try? manager.removeItem(at: folder) }
         return keep.values.reduce(into: Pending()) { pending, size in
             pending.files += 1
             pending.bytes += size
         }
     }
 
-    /// Moves the files waiting to be uploaded to another cache folder, replacing older copies there,
-    /// and deletes the rest.
+    /// Moves the files waiting to be uploaded and the Finder tags to another cache folder, replacing older copies
+    /// there, and deletes the rest.
     static func move(_ folder: URL, to destination: URL) {
         purge(folder)
         let manager = FileManager.default
-        for root in ["vfs", "vfsMeta"] {
+        for root in ["vfs", "vfsMeta", finderTags] {
             for file in files(under: folder.appending(path: root)) {
                 let target = destination.appending(path: root).appending(path: file.relative)
                 try? manager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)

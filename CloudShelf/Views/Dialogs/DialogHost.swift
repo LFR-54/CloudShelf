@@ -44,7 +44,8 @@ struct DialogHost: View {
     }
 }
 
-/// Dialog surface: the window color, 20 pt corners and the mockup's shadow.
+/// Dialog surface: the window color, 20 pt corners and a shadow the size of a sheet's. It stays close to the dialog,
+/// which nearly fills a small window: a wider one would show as a dark band, cut off by the window's edges.
 struct ModalSurface<Content: View>: View {
     @Environment(\.dialogSpace) private var space
     let width: CGFloat
@@ -56,7 +57,7 @@ struct ModalSurface<Content: View>: View {
             .background(Theme.window, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             .hairlineBorder(RoundedRectangle(cornerRadius: 20, style: .continuous), .black.opacity(0.14))
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .shadow(color: .black.opacity(0.3), radius: 35, y: 24)
+            .shadow(color: .black.opacity(0.18), radius: 16, y: 8)
     }
 }
 

@@ -33,6 +33,7 @@ CloudShelf transforme chaque compte en ligne en un lecteur du Finder, comme RaiD
 - **Un profil par usage.** *Streaming* pour Emby, Plex et Jellyfin, *Documents* pour le travail courant, *Sauvegarde* pour les grosses copies.
 - **Le débit en direct.** Un graphique dans la barre des menus, une page Activité, et un test de débit par lecteur.
 - **Vos envois protégés.** CloudShelf garde dans le cache tout fichier pas encore envoyé, même quand vous videz le cache, et prévient avant de démonter ou de quitter.
+- **Les tags du Finder.** Sur les lecteurs macFUSE, les tags et les couleurs posés dans le Finder restent sur le Mac. `~/Cloud/Tags` les rassemble, un dossier par tag avec un alias par élément, à épingler dans la barre latérale : Spotlight n'indexe pas ces lecteurs, et la section Tags du Finder ne les voit pas.
 - **Le disque protégé.** Quand l'espace libre baisse, CloudShelf vide le cache du lecteur qui en libère le plus, sans toucher aux envois en attente.
 - **Sans surprise.** Reconnexion automatique si rclone s'arrête ou si le réseau manque au montage, lecteurs repris tels quels après un arrêt brutal de l'app, éjection depuis le Finder respectée, limite de débit appliquée à chaud, fichiers `.DS_Store` et `._*` tenus à l'écart du cloud.
 - **Privé.** Aucun serveur, aucune télémétrie : vos identifiants restent dans `rclone.conf`, sur votre Mac.
@@ -113,7 +114,7 @@ flowchart LR
 
 ### Le moteur rclone modifié
 
-CloudShelf embarque rclone 1.75.2 avec sept correctifs, dans [`rclone-patches/`](rclone-patches) :
+CloudShelf embarque rclone 1.75.2 avec huit correctifs, dans [`rclone-patches/`](rclone-patches) :
 
 | Correctif | Rôle |
 | --- | --- |
@@ -124,6 +125,7 @@ CloudShelf embarque rclone 1.75.2 avec sept correctifs, dans [`rclone-patches/`]
 | [**Fichiers `._` et `.DS_Store` avec macFUSE**](rclone-patches/0005-cmount-macos-files-in-memory.patch) | L'option `noappledouble` de macFUSE refuse de créer ces fichiers, et le Finder abandonne alors la copie de tout dossier qui contient un `.DS_Store` (erreur -8062). rclone les garde en mémoire à la place de macFUSE, sans les montrer dans les listes ni les envoyer au cloud. |
 | [**Écritures sur un disque presque plein**](rclone-patches/0006-vfs-wait-for-uploads-when-disk-low.patch) | Les fichiers écrits passent par le cache local avant d'être envoyés. Le Finder écrit plus vite que la connexion n'envoie, et une grosse copie remplissait le disque, puis échouait (erreur -36). Sous `--vfs-cache-min-free-space`, chaque écriture attend que les envois en cours libèrent de la place, 10 s au plus : la copie ralentit à la vitesse d'envoi au lieu d'échouer. |
 | [**Lecture interrompue**](rclone-patches/0007-vfs-close-before-end-is-not-an-error.patch) | Fermer un fichier avant la fin, comme une vidéo arrêtée, abandonne les blocs lus d'avance. rclone le comptait comme une erreur de transfert, et le journal se remplissait d'erreurs « stream abandoned ». |
+| [**Tags du Finder**](rclone-patches/0008-cmount-keep-finder-tags.patch) | Le cloud ne garde pas les attributs étendus, et le correctif 0003 les écarte. Les tags, l'étiquette de couleur et le commentaire du Finder sont gardés à la place sur le Mac, à côté du cache du lecteur, et suivent leurs fichiers renommés ou supprimés depuis le montage. Ils ne sont pas envoyés au cloud. Avec macFUSE uniquement. |
 
 ## Compiler
 
@@ -158,3 +160,5 @@ CloudShelf ne collecte rien et ne passe par aucun serveur : votre Mac échange d
 ## Licence
 
 CloudShelf est publié sous [licence MIT](LICENSE). rclone est un logiciel de Nick Craig-Wood et de ses contributeurs, sous licence MIT ; les correctifs de `rclone-patches/` sont publiés sous la même licence. macFUSE n'est pas inclus et garde sa propre licence.
+
+Les logos des services appartiennent à leurs propriétaires et servent seulement à les reconnaître. Ils viennent de [Wikimedia Commons](https://commons.wikimedia.org), recadrés sur leur symbole : celui de kDrive est © Infomaniak, sous licence [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0), celui de Nextcloud vient d'openDesk, sous licence Apache 2.0, et les autres sont dans le domaine public.

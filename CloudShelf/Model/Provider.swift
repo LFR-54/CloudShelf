@@ -13,7 +13,7 @@ struct Provider: Identifiable, Hashable {
     }
 
     enum Glyph: Hashable {
-        /// A logo, drawn at 62 % of the tile.
+        /// The service's logo in its own colours, drawn at 70 % of a white tile.
         case brand(String)
         /// An outline icon, drawn at 54 % of the tile.
         case icon(String)
@@ -37,7 +37,7 @@ struct Provider: Identifiable, Hashable {
                  kind: .server, type: "webdav", vendor: "other", port: 443, hostPlaceholder: "https://serveur.exemple.fr"),
         Provider(id: "gdrive", name: "Google Drive", subtitle: "Google Workspace", color: Color(hex: 0x1A73E8), glyph: .brand("brand-googledrive"),
                  kind: .oauth, type: "drive", web: URL(string: "https://drive.google.com")),
-        Provider(id: "onedrive", name: "OneDrive", subtitle: "Personnel et professionnel", color: Color(hex: 0x0364B8), glyph: .icon("tile-brand-onedrive"),
+        Provider(id: "onedrive", name: "OneDrive", subtitle: "Personnel et professionnel", color: Color(hex: 0x0364B8), glyph: .brand("brand-onedrive"),
                  kind: .oauth, type: "onedrive", web: URL(string: "https://onedrive.live.com")),
         Provider(id: "dropbox", name: "Dropbox", subtitle: "Personnel et Business", color: Color(hex: 0x0061FF), glyph: .brand("brand-dropbox"),
                  kind: .oauth, type: "dropbox", web: URL(string: "https://www.dropbox.com/home")),
@@ -47,7 +47,7 @@ struct Provider: Identifiable, Hashable {
                  kind: .login, type: "mega", web: URL(string: "https://mega.nz")),
         Provider(id: "proton", name: "Proton Drive", subtitle: "Chiffré de bout en bout", color: Color(hex: 0x6D4AFF), glyph: .brand("brand-protondrive"),
                  kind: .login, type: "protondrive", web: URL(string: "https://drive.proton.me")),
-        Provider(id: "kdrive", name: "kDrive", subtitle: "Infomaniak", color: Color(hex: 0x0098FF), glyph: .brand("brand-infomaniak"),
+        Provider(id: "kdrive", name: "kDrive", subtitle: "Infomaniak", color: Color(hex: 0x0098FF), glyph: .brand("brand-kdrive"),
                  kind: .server, type: "webdav", vendor: "other", port: 443, hostPlaceholder: "https://123456.connect.kdrive.infomaniak.com",
                  web: URL(string: "https://kdrive.infomaniak.com")),
         Provider(id: "s3", name: "Compatible S3", subtitle: "AWS, Backblaze, Wasabi, R2", color: Color(hex: 0xF08C00), glyph: .icon("tile-bucket"),

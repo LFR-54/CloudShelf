@@ -168,7 +168,8 @@ struct DriveDetailPage: View {
                         StatSub(text: "sur \(Format.capacity(total))")
                     }
                 } else {
-                    StatSub(text: drive.space == nil ? "Lecture en cours…" : "Non communiqué")
+                    StatSub(text: drive.spaceError != nil ? "Illisible" : drive.space == nil ? "Lecture en cours…" : "Non communiqué")
+                        .help(drive.spaceError ?? "")
                 }
             }
         }

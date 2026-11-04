@@ -57,8 +57,9 @@ struct DriveCard: View {
     var body: some View {
         let actions = DriveActions(store: store, app: app)
         HStack(spacing: 14) {
-            ProviderTile(provider: drive.provider, size: 48)
-                .frame(width: 52, alignment: .leading)
+            ProviderTile(provider: drive.provider, size: 56)
+                .help("\(drive.provider.name), monté avec \(drive.settings.method.rawValue)")
+                .frame(width: 60, alignment: .leading)
             details
                 .frame(maxWidth: .infinity, alignment: .leading)
             trailing(actions)
@@ -96,7 +97,6 @@ struct DriveCard: View {
     private var details: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                if !compact { Badge(text: drive.settings.method.badge) }
                 if app.renaming == drive.id {
                     RenameField(drive: drive)
                 } else {
@@ -116,7 +116,7 @@ struct DriveCard: View {
                 .padding(.top, 1)
             SpaceBar(space: drive.space, height: 5)
                 .padding(.top, 9)
-            SpaceCaption(space: drive.space)
+            SpaceCaption(space: drive.space, unreadable: drive.spaceError != nil)
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.text2)
                 .lineBox(12)
@@ -134,7 +134,7 @@ struct DriveCard: View {
                     .foregroundStyle(Theme.orangeInk)
                     .lineLimit(2)
                     .padding(.top, 4)
-            } else if let notice = drive.notice {
+            } else if let notice = drive.notice ?? drive.spaceError {
                 Text(notice)
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.orangeInk)
@@ -164,6 +164,7 @@ struct DriveCard: View {
 /// "0,69 To libres sur 2,00 To · Presque plein".
 struct SpaceCaption: View {
     let space: Space?
+    var unreadable = false
 
     var body: some View {
         let level = SpaceLevel(space)
@@ -176,7 +177,7 @@ struct SpaceCaption: View {
                     .monospacedDigit()
             }
         } else {
-            Text(space == nil ? "Espace en cours de lecture…" : "Espace non communiqué par ce service")
+            Text(unreadable ? "Espace illisible" : space == nil ? "Espace en cours de lecture…" : "Espace non communiqué par ce service")
         }
     }
 }

@@ -101,6 +101,8 @@ final class Drive: Identifiable {
     var readSpeed = 0.0
     var writeSpeed = 0.0
     var space: Space?
+    /// Why the space could not be read, which usually means the remote itself cannot be reached.
+    var spaceError: String?
     /// Read throughput of the last 60 seconds, oldest first.
     var history = Array(repeating: 0.0, count: 60)
     /// Write throughput of the last 60 seconds, oldest first.

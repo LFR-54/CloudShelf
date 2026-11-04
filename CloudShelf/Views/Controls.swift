@@ -492,22 +492,29 @@ struct ProviderTile: View {
     let size: CGFloat
 
     var body: some View {
-        RoundedRectangle(cornerRadius: (size / 4).rounded(), style: .continuous)
-            .fill(provider.color)
-            .hairlineBorder(RoundedRectangle(cornerRadius: (size / 4).rounded(), style: .continuous), .white.opacity(0.16))
-            .frame(width: size, height: size)
-            .overlay {
-                switch provider.glyph {
-                case .brand(let name):
-                    Image(name).renderingMode(.template).resizable().scaledToFit()
-                        .frame(width: size * 0.62, height: size * 0.62)
-                case .icon(let name):
-                    Image(name).renderingMode(.template).resizable().scaledToFit()
-                        .frame(width: size * 0.56, height: size * 0.56)
-                }
+        let shape = RoundedRectangle(cornerRadius: (size / 4).rounded(), style: .continuous)
+        Group {
+            switch provider.glyph {
+            case .brand(let name):
+                // Logos keep the colours of their brand, which a coloured tile would clash with.
+                shape.fill(Theme.logoTile)
+                    .hairlineBorder(shape, .black.opacity(0.1))
+                    .overlay {
+                        Image(name).resizable().scaledToFit()
+                            .frame(width: size * 0.7, height: size * 0.7)
+                    }
+            case .icon(let name):
+                shape.fill(provider.color)
+                    .hairlineBorder(shape, .white.opacity(0.16))
+                    .overlay {
+                        Image(name).renderingMode(.template).resizable().scaledToFit()
+                            .frame(width: size * 0.56, height: size * 0.56)
+                            .foregroundStyle(.white)
+                    }
             }
-            .foregroundStyle(.white)
-            .accessibilityHidden(true)
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
     }
 }
 
@@ -558,8 +565,9 @@ struct SpaceLevel {
 
     var isNearlyFull: Bool { fraction >= 0.9 }
 
+    /// Colour only warns: the bar shows the space used, which green would present as good news.
     var color: Color {
-        fraction >= 0.9 ? Theme.red : fraction >= 0.75 ? Theme.orange : Theme.green
+        fraction >= 0.9 ? Theme.red : fraction >= 0.75 ? Theme.orange : Theme.accent
     }
 }
 

@@ -1,5 +1,5 @@
 {
-  "images" : [ { "filename" : "protondrive.svg", "idiom" : "universal" } ],
+  "images" : [ { "filename" : "protondrive.pdf", "idiom" : "universal" } ],
   "info" : { "author" : "xcode", "version" : 1 },
-  "properties" : { "preserves-vector-representation" : true, "template-rendering-intent" : "template" }
+  "properties" : { "preserves-vector-representation" : true, "template-rendering-intent" : "original" }
 }

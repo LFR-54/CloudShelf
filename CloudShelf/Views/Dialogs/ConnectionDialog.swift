@@ -10,6 +10,8 @@ struct ConnectionDialog: View {
     @Environment(AppState.self) private var app
     let editing: Drive?
     @State private var draft: ConnectionDraft
+    /// The connection being edited as it was opened.
+    @State private var original: ConnectionDraft?
     @State private var errors: [ConnectionDraft.Field: String] = [:]
     @AppStorage("connectionAdvancedOpen") private var advancedOpen = true
     @State private var signIn: Task<Void, Never>?
@@ -344,6 +346,7 @@ struct ConnectionDialog: View {
     @Sendable private func load() async {
         if let editing {
             draft = ConnectionDraft(drive: editing, stored: await store.storedParameters(editing))
+            original = draft
         } else {
             startNewDrive()
         }
@@ -420,6 +423,13 @@ struct ConnectionDialog: View {
         saving = true
         Task {
             do {
+                // A connection is tried before it is saved, unless it is unchanged or was just tested: rclone mounts
+                // a WebDAV address that leads nowhere as an empty volume.
+                let tested = if case .succeeded = test { true } else { false }
+                if !tested, editing == nil || draft.parameters != original?.parameters {
+                    test = .running
+                    test = .succeeded(try await store.testConnection(draft, editing: editing))
+                }
                 if let editing {
                     try await store.updateConnection(editing, with: draft)
                     app.overlay = nil

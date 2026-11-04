@@ -27,6 +27,8 @@ final class DriveStore {
     @ObservationIgnored private var ejections: [Drive.ID: ContinuousClock.Instant] = [:]
     @ObservationIgnored private var ejectObserver: NSObjectProtocol?
     @ObservationIgnored private var refreshingSpace = false
+    @ObservationIgnored private var tagSignature: String?
+    @ObservationIgnored private var syncingTags = false
     @ObservationIgnored private let catalog: URL?
 
     static let catalogURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -158,16 +160,40 @@ final class DriveStore {
         guard let rclone, !refreshingSpace else { return }
         refreshingSpace = true
         defer { refreshingSpace = false }
-        await withTaskGroup(of: (String, Space?).self) { group in
+        await withTaskGroup(of: (String, Space?, String?).self) { group in
             for drive in drives {
                 let id = drive.id, spec = drive.remoteSpec
-                group.addTask { (id, try? await rclone.about(spec)) }
+                group.addTask {
+                    let (space, error) = await Self.space(of: spec, rclone)
+                    return (id, space, error)
+                }
             }
-            for await (id, space) in group {
+            for await (id, space, error) in group {
                 guard let drive = drive(id) else { continue }
-                drive.space = space
-                warnIfNearlyFull(drive)
+                show(space, error, on: drive)
             }
+        }
+    }
+
+    private func readSpace(_ drive: Drive) async {
+        guard let rclone else { return }
+        let (space, error) = await Self.space(of: drive.remoteSpec, rclone)
+        show(space, error, on: drive)
+    }
+
+    private func show(_ space: Space?, _ error: String?, on drive: Drive) {
+        drive.space = space
+        drive.spaceError = error.map { RcloneLog.explain($0, provider: drive.provider.id) }
+        warnIfNearlyFull(drive)
+    }
+
+    /// The space of a remote, or why it could not be read; a service that does not report it gets an empty Space.
+    nonisolated private static func space(of spec: String, _ rclone: Rclone) async -> (Space?, String?) {
+        do {
+            return (try await rclone.about(spec), nil)
+        } catch {
+            let message = error.localizedDescription
+            return message.contains("doesn't support about") ? (Space(total: nil, used: nil, free: nil), nil) : (nil, message)
         }
     }
 
@@ -407,7 +433,7 @@ final class DriveStore {
     }
 
     private func fail(_ drive: Drive, _ message: String) {
-        let message = RcloneLog.explain(message)
+        let message = RcloneLog.explain(message, provider: drive.provider.id)
         drive.state = .failed(message)
         let lowered = message.lowercased()
         let expired = lowered.contains("token") && ["expired", "invalid_grant", "unauthorized", "401"].contains { lowered.contains($0) }
@@ -426,6 +452,9 @@ final class DriveStore {
         if name.contains("/") || name.contains(":") { return "Le nom ne peut pas contenir « / » ni « : »." }
         // The name is the folder of the mount point: "." or ".." would mount over its parent.
         if name.hasPrefix(".") { return "Le nom ne peut pas commencer par un point." }
+        if name.compare(TagShortcuts.root.lastPathComponent, options: .caseInsensitive) == .orderedSame {
+            return "« \(TagShortcuts.root.lastPathComponent) » est réservé au dossier des tags, dans ~/Cloud."
+        }
         if drives.contains(where: { $0.id != id && $0.name.lowercased() == name.lowercased() }) { return "Un lecteur porte déjà ce nom." }
         return nil
     }
@@ -680,7 +709,11 @@ final class DriveStore {
         if let free = try? await rclone.about(spec, config: config).free {
             return "Connexion réussie · \(Format.capacity(free)) libres"
         }
-        _ = try await rclone.run(["lsf", spec, "--max-depth", "1"], config: config)
+        do {
+            _ = try await rclone.run(["lsf", spec, "--max-depth", "1"], config: config)
+        } catch {
+            throw RcloneError.command(RcloneLog.explain(error.localizedDescription, provider: draft.provider.id))
+        }
         return "Connexion réussie"
     }
 
@@ -707,9 +740,7 @@ final class DriveStore {
         drives.append(drive)
         save()
         mount(drive)
-        Task {
-            drive.space = try? await rclone.about(drive.remoteSpec)
-        }
+        Task { await readSpace(drive) }
         return drive
     }
 
@@ -730,6 +761,7 @@ final class DriveStore {
             drive.record.settings.skipCertificateCheck = draft.skipCertificateCheck
         }
         save()
+        await readSpace(drive)
     }
 
     /// Authorizes again in the browser and remounts with the new token.
@@ -783,6 +815,7 @@ final class DriveStore {
             var tick = 0
             while !Task.isCancelled {
                 await self?.sampleThroughput()
+                if tick % 3 == 0 { self?.syncTags() }
                 if tick % 10 == 0 {
                     await self?.measureCaches()
                     await self?.protectDisk()
@@ -792,6 +825,28 @@ final class DriveStore {
                 tick += 1
                 try? await Task.sleep(for: .seconds(1))
             }
+        }
+    }
+
+    /// Brings the aliases of ~/Cloud/Tags in line with the Finder tags once they or the mounts change, off the main
+    /// thread: making an alias reads the item on its drive.
+    private func syncTags() {
+        guard catalog != nil, !syncingTags else { return }
+        let snapshot = drives.map { drive in
+            TagShortcuts.Drive(id: drive.id, name: drive.name, mountPoint: drive.mountPoint,
+                               cache: MountOptions.cacheDirectory(for: drive, base: preferences.cacheBase), isMounted: drive.isMounted)
+        }
+        let previous = tagSignature
+        syncingTags = true
+        Task {
+            let signature = await Task.detached(priority: .utility) { () -> String? in
+                let signature = TagShortcuts.signature(snapshot)
+                guard signature != previous else { return nil }
+                TagShortcuts.sync(snapshot)
+                return signature
+            }.value
+            if let signature { tagSignature = signature }
+            syncingTags = false
         }
     }
 

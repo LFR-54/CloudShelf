@@ -234,13 +234,27 @@ enum RcloneLog {
         return message.isEmpty ? nil : message
     }
 
-    /// Errors that say nothing to someone who does not know rclone. 202264815644 is the Google Cloud project behind
-    /// rclone's shared Google Drive key.
-    static func explain(_ message: String) -> String {
-        guard message.contains("Quota exceeded") || message.contains("rateLimitExceeded") else { return message }
-        return message.contains("202264815644")
-            ? "Google refuse les requêtes : la clé partagée de rclone a dépassé son quota. Réessayez plus tard, ou utilisez votre propre clé dans la fiche du lecteur."
-            : "Google refuse les requêtes : quota dépassé. Réessayez dans quelques minutes."
+    /// Errors that say nothing to someone who does not know rclone, with advice for the service `provider` when it
+    /// has its own pitfalls. 202264815644 is the Google Cloud project behind rclone's shared Google Drive key.
+    static func explain(_ message: String, provider: String? = nil) -> String {
+        if message.contains("Quota exceeded") || message.contains("rateLimitExceeded") {
+            return message.contains("202264815644")
+                ? "Google refuse les requêtes : la clé partagée de rclone a dépassé son quota. Réessayez plus tard, ou utilisez votre propre clé dans la fiche du lecteur."
+                : "Google refuse les requêtes : quota dépassé. Réessayez dans quelques minutes."
+        }
+        // kDrive answers 404 for any number that is not the ID of a kDrive with WebDAV, credentials or not.
+        if message.contains("404 Not Found") || message.contains("directory not found") {
+            return provider == "kdrive"
+                ? "kDrive introuvable à cette adresse. L'ID est le nombre qui suit /drive/ dans l'adresse de kDrive sur le Web, et le WebDAV n'est pas inclus dans les offres kSuite Free et Standard ni dans my kSuite."
+                : "Le serveur ne trouve rien à cette adresse (erreur 404). Vérifiez l'adresse et le chemin."
+        }
+        if message.contains("NotAuthenticated") || message.contains("401 Unauthorized") {
+            return provider == "kdrive"
+                ? "Identifiant ou mot de passe refusés. Avec la double authentification, utilisez un mot de passe d'application Infomaniak."
+                : "Identifiant ou mot de passe refusés par le serveur."
+        }
+        if isNetworkError(message) { return "Serveur injoignable. Vérifiez la connexion à Internet et l'adresse du serveur." }
+        return message
     }
 
     /// Whether rclone could not reach the server at all, as when the network is down.

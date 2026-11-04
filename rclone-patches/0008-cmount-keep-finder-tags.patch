@@ -1,0 +1,461 @@
+diff --git a/cmd/cmount/fs.go b/cmd/cmount/fs.go
+index 45df24e..b887e7a 100644
+--- a/cmd/cmount/fs.go
++++ b/cmd/cmount/fs.go
+@@ -4,8 +4,10 @@ package cmount
+ 
+ import (
+ 	"io"
++	"net/url"
+ 	"os"
+ 	"path"
++	"path/filepath"
+ 	"runtime"
+ 	"strings"
+ 	"sync"
+@@ -14,6 +16,7 @@ import (
+ 
+ 	"github.com/rclone/rclone/cmd/mountlib"
+ 	"github.com/rclone/rclone/fs"
++	"github.com/rclone/rclone/fs/config"
+ 	"github.com/rclone/rclone/fs/fserrors"
+ 	"github.com/rclone/rclone/fs/log"
+ 	"github.com/rclone/rclone/lib/macmeta"
+@@ -36,6 +39,7 @@ type FS struct {
+ 	handles   []vfs.Handle
+ 	destroyed atomic.Int32
+ 	meta      *macmeta.Store // macOS metadata files kept in memory, or nil to store them like any file
++	attrs     *macmeta.Attrs // the Finder's extended attributes kept on disk, or nil to drop them with the others
+ 	metaFiles map[uint64]*macmeta.Handle
+ 	metaNext  uint64
+ }
+@@ -53,10 +57,28 @@ func NewFS(VFS *vfs.VFS, opt *mountlib.Options) *FS {
+ 	if runtime.GOOS == "darwin" && opt.NoAppleDouble {
+ 		fsys.meta = macmeta.New()
+ 		fsys.metaFiles = map[uint64]*macmeta.Handle{}
++		// Beside the VFS cache, which also outlives the mount, under a name of its own for each remote.
++		file := filepath.Join(config.GetCacheDir(), "finderMeta", url.PathEscape(fs.ConfigString(fsys.f))+".json")
++		attrs, err := macmeta.OpenAttrs(file)
++		if err != nil {
++			fs.Errorf(nil, "Finder tags will not be kept: %v", err)
++		} else {
++			fsys.attrs = attrs
++		}
+ 	}
+ 	return fsys
+ }
+ 
++// forgetAttrs drops the Finder's attributes of a removed file or directory and of what it held.
++func (fsys *FS) forgetAttrs(path string) {
++	if fsys.attrs == nil {
++		return
++	}
++	if err := fsys.attrs.RemoveAll(path); err != nil {
++		fs.Errorf(path, "Failed to forget Finder tags: %v", err)
++	}
++}
++
+ // isMeta reports whether path is a macOS metadata file kept in memory.
+ func (fsys *FS) isMeta(path string) bool {
+ 	return fsys.meta != nil && macmeta.Match(path)
+@@ -547,7 +569,11 @@ func (fsys *FS) Unlink(filePath string) (errc int) {
+ 	if errc != 0 {
+ 		return errc
+ 	}
+-	return translateError(parentDir.RemoveName(leaf))
++	errc = translateError(parentDir.RemoveName(leaf))
++	if errc == 0 {
++		fsys.forgetAttrs(filePath)
++	}
++	return errc
+ }
+ 
+ // Mkdir creates a directory.
+@@ -571,6 +597,7 @@ func (fsys *FS) Rmdir(dirPath string) (errc int) {
+ 	errc = translateError(parentDir.RemoveName(leaf))
+ 	if errc == 0 && fsys.meta != nil {
+ 		fsys.meta.RemoveAll(dirPath)
++		fsys.forgetAttrs(dirPath)
+ 	}
+ 	return errc
+ }
+@@ -589,6 +616,11 @@ func (fsys *FS) Rename(oldPath string, newPath string) (errc int) {
+ 	if errc == 0 && fsys.meta != nil {
+ 		fsys.meta.RenameAll(oldPath, newPath)
+ 	}
++	if errc == 0 && fsys.attrs != nil {
++		if err := fsys.attrs.RenameAll(oldPath, newPath); err != nil {
++			fs.Errorf(newPath, "Failed to move Finder tags: %v", err)
++		}
++	}
+ 	return errc
+ }
+ 
+@@ -707,9 +739,26 @@ func discardXattrs(opt *mountlib.Options) bool {
+ 	return runtime.GOOS == "darwin" && opt.NoAppleDouble
+ }
+ 
++// keepsAttr reports whether the Finder's attribute name of path is kept on disk rather than dropped.
++func (fsys *FS) keepsAttr(path, name string) bool {
++	return fsys.attrs != nil && macmeta.Keeps(name) && !fsys.isMeta(path)
++}
++
+ // Setxattr sets extended attributes.
++//
++// The XATTR_CREATE and XATTR_REPLACE flags are not checked: macFUSE passes macOS's values, which differ
++// from cgofuse's, and the Finder does not use them.
+ func (fsys *FS) Setxattr(path string, name string, value []byte, flags int) (errc int) {
+ 	defer log.Trace(path, "name=%q, value=%q, flags=%d", name, value, flags)("errc=%d", &errc)
++	if fsys.keepsAttr(path, name) {
++		if _, errc := fsys.lookupNode(path); errc != 0 {
++			return errc
++		}
++		if len(value) > macmeta.MaxAttrSize {
++			return -fuse.E2BIG
++		}
++		return translateError(fsys.attrs.Set(path, name, value))
++	}
+ 	if discardXattrs(fsys.opt) || shouldIgnoreAppleXattr(fsys.opt) && strings.HasPrefix(name, "com.apple.") {
+ 		return 0
+ 	}
+@@ -719,6 +768,12 @@ func (fsys *FS) Setxattr(path string, name string, value []byte, flags int) (err
+ // Getxattr gets extended attributes.
+ func (fsys *FS) Getxattr(path string, name string) (errc int, value []byte) {
+ 	defer log.Trace(path, "name=%q", name)("errc=%d, value=%q", &errc, &value)
++	if fsys.keepsAttr(path, name) {
++		if value, ok := fsys.attrs.Get(path, name); ok {
++			return 0, value
++		}
++		return -fuse.ENOATTR, nil
++	}
+ 	if discardXattrs(fsys.opt) || shouldIgnoreAppleXattr(fsys.opt) && strings.HasPrefix(name, "com.apple.") {
+ 		return -fuse.ENOATTR, nil
+ 	}
+@@ -728,6 +783,16 @@ func (fsys *FS) Getxattr(path string, name string) (errc int, value []byte) {
+ // Removexattr removes extended attributes.
+ func (fsys *FS) Removexattr(path string, name string) (errc int) {
+ 	defer log.Trace(path, "name=%q", name)("errc=%d", &errc)
++	if fsys.keepsAttr(path, name) {
++		removed, err := fsys.attrs.Remove(path, name)
++		if err != nil {
++			return translateError(err)
++		}
++		if !removed {
++			return -fuse.ENOATTR
++		}
++		return 0
++	}
+ 	if discardXattrs(fsys.opt) || shouldIgnoreAppleXattr(fsys.opt) && strings.HasPrefix(name, "com.apple.") {
+ 		return 0
+ 	}
+@@ -737,6 +802,14 @@ func (fsys *FS) Removexattr(path string, name string) (errc int) {
+ // Listxattr lists extended attributes.
+ func (fsys *FS) Listxattr(path string, fill func(name string) bool) (errc int) {
+ 	defer log.Trace(path, "fill=%p", fill)("errc=%d", &errc)
++	if fsys.attrs != nil && !fsys.isMeta(path) {
++		for _, name := range fsys.attrs.List(path) {
++			if !fill(name) {
++				return -fuse.ERANGE
++			}
++		}
++		return 0
++	}
+ 	if discardXattrs(fsys.opt) || shouldIgnoreAppleXattr(fsys.opt) {
+ 		return 0
+ 	}
+diff --git a/lib/macmeta/attrs.go b/lib/macmeta/attrs.go
+new file mode 100644
+index 0000000..5a19cbc
+--- /dev/null
++++ b/lib/macmeta/attrs.go
+@@ -0,0 +1,188 @@
++package macmeta
++
++import (
++	"bytes"
++	"encoding/json"
++	"errors"
++	"os"
++	"path/filepath"
++	"sort"
++	"strings"
++	"sync"
++
++	"golang.org/x/text/unicode/norm"
++)
++
++// kept lists the extended attributes Attrs keeps: the Finder's tags, colour label and comment.
++var kept = map[string]bool{
++	"com.apple.metadata:_kMDItemUserTags":     true,
++	"com.apple.FinderInfo":                    true,
++	"com.apple.metadata:kMDItemFinderComment": true,
++}
++
++// finderInfo is the attribute holding the colour label, among flags; all zeros means none.
++const finderInfo = "com.apple.FinderInfo"
++
++// MaxAttrSize bounds a kept value: a list of tags or a comment takes a few hundred bytes.
++const MaxAttrSize = 64 * 1024
++
++// Keeps reports whether Attrs keeps the attribute name.
++func Keeps(name string) bool {
++	return kept[name]
++}
++
++// key is the form of a path in Attrs. The Finder passes paths with decomposed accents and the shell with
++// precomposed ones, both naming the same file.
++func key(p string) string {
++	return norm.NFC.String(p)
++}
++
++// Attrs keeps the Finder's own extended attributes by path, in a file on this computer.
++//
++// A remote has nowhere to keep extended attributes, so a mount drops them, and the Finder then shows no
++// tag on its files. These few are kept instead, and follow their files as they are renamed or removed
++// through the mount. Changes made to the remote from elsewhere are not seen.
++type Attrs struct {
++	mu     sync.Mutex
++	file   string
++	byPath map[string]map[string][]byte
++}
++
++// OpenAttrs loads the attributes saved in file, which need not exist yet.
++func OpenAttrs(file string) (*Attrs, error) {
++	a := &Attrs{file: file, byPath: map[string]map[string][]byte{}}
++	data, err := os.ReadFile(file)
++	if errors.Is(err, os.ErrNotExist) {
++		return a, nil
++	}
++	if err != nil {
++		return nil, err
++	}
++	if err := json.Unmarshal(data, &a.byPath); err != nil {
++		return nil, err
++	}
++	return a, nil
++}
++
++// Get returns the attribute name of p.
++func (a *Attrs) Get(p, name string) (value []byte, ok bool) {
++	p = key(p)
++	a.mu.Lock()
++	defer a.mu.Unlock()
++	value, ok = a.byPath[p][name]
++	return value, ok
++}
++
++// List returns the names of the attributes of p, sorted.
++func (a *Attrs) List(p string) (names []string) {
++	p = key(p)
++	a.mu.Lock()
++	defer a.mu.Unlock()
++	for name := range a.byPath[p] {
++		names = append(names, name)
++	}
++	sort.Strings(names)
++	return names
++}
++
++// Set sets the attribute name of p and saves. A FinderInfo of zeros, which the Finder writes to clear a
++// colour label, removes it.
++func (a *Attrs) Set(p, name string, value []byte) error {
++	if name == finderInfo && len(bytes.Trim(value, "\x00")) == 0 {
++		_, err := a.Remove(p, name)
++		return err
++	}
++	p = key(p)
++	a.mu.Lock()
++	defer a.mu.Unlock()
++	if a.byPath[p] == nil {
++		a.byPath[p] = map[string][]byte{}
++	}
++	a.byPath[p][name] = bytes.Clone(value)
++	return a.save()
++}
++
++// Remove removes the attribute name of p, reporting whether it was set.
++func (a *Attrs) Remove(p, name string) (removed bool, err error) {
++	p = key(p)
++	a.mu.Lock()
++	defer a.mu.Unlock()
++	if _, ok := a.byPath[p][name]; !ok {
++		return false, nil
++	}
++	delete(a.byPath[p], name)
++	if len(a.byPath[p]) == 0 {
++		delete(a.byPath, p)
++	}
++	return true, a.save()
++}
++
++// RemoveAll removes the attributes of p and of everything under it, once p has been removed.
++func (a *Attrs) RemoveAll(p string) error {
++	p = key(p)
++	a.mu.Lock()
++	defer a.mu.Unlock()
++	if !a.removeAll(p) {
++		return nil
++	}
++	return a.save()
++}
++
++// removeAll removes the attributes of p and of everything under it, reporting whether there were any.
++// Called with the lock held.
++func (a *Attrs) removeAll(p string) (changed bool) {
++	prefix := strings.TrimSuffix(p, "/") + "/"
++	for q := range a.byPath {
++		if q == p || strings.HasPrefix(q, prefix) {
++			delete(a.byPath, q)
++			changed = true
++		}
++	}
++	return changed
++}
++
++// RenameAll moves the attributes of oldPath and of everything under it to newPath, once renamed,
++// replacing those there.
++func (a *Attrs) RenameAll(oldPath, newPath string) error {
++	oldPath, newPath = key(oldPath), key(newPath)
++	a.mu.Lock()
++	defer a.mu.Unlock()
++	oldPrefix := strings.TrimSuffix(oldPath, "/") + "/"
++	moved := map[string]map[string][]byte{}
++	for q, attrs := range a.byPath {
++		switch {
++		case q == oldPath:
++			moved[newPath] = attrs
++		case strings.HasPrefix(q, oldPrefix):
++			moved[strings.TrimSuffix(newPath, "/")+"/"+strings.TrimPrefix(q, oldPrefix)] = attrs
++		default:
++			continue
++		}
++		delete(a.byPath, q)
++	}
++	changed := a.removeAll(newPath)
++	if len(moved) == 0 && !changed {
++		return nil
++	}
++	for q, attrs := range moved {
++		a.byPath[q] = attrs
++	}
++	return a.save()
++}
++
++// save writes the attributes to their file through a temporary one, so a crash leaves the old or the new.
++// Called with the lock held.
++func (a *Attrs) save() error {
++	data, err := json.Marshal(a.byPath)
++	if err != nil {
++		return err
++	}
++	if err := os.MkdirAll(filepath.Dir(a.file), 0o700); err != nil {
++		return err
++	}
++	tmp := a.file + ".tmp"
++	if err := os.WriteFile(tmp, data, 0o600); err != nil {
++		return err
++	}
++	return os.Rename(tmp, a.file)
++}
+diff --git a/lib/macmeta/attrs_test.go b/lib/macmeta/attrs_test.go
+new file mode 100644
+index 0000000..c4c4007
+--- /dev/null
++++ b/lib/macmeta/attrs_test.go
+@@ -0,0 +1,96 @@
++package macmeta
++
++import (
++	"path/filepath"
++	"testing"
++
++	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++)
++
++const tags = "com.apple.metadata:_kMDItemUserTags"
++
++func TestKeeps(t *testing.T) {
++	assert.True(t, Keeps(tags))
++	assert.True(t, Keeps("com.apple.FinderInfo"))
++	assert.False(t, Keeps("com.apple.quarantine"))
++	assert.False(t, Keeps("com.apple.ResourceFork"))
++}
++
++func TestAttrsPersist(t *testing.T) {
++	file := filepath.Join(t.TempDir(), "sub", "attrs.json")
++	a, err := OpenAttrs(file)
++	require.NoError(t, err)
++	_, ok := a.Get("/dir", tags)
++	assert.False(t, ok)
++
++	require.NoError(t, a.Set("/dir", tags, []byte("red")))
++	require.NoError(t, a.Set("/dir", "com.apple.metadata:kMDItemFinderComment", []byte("note")))
++	assert.Equal(t, []string{tags, "com.apple.metadata:kMDItemFinderComment"}, a.List("/dir"))
++
++	b, err := OpenAttrs(file)
++	require.NoError(t, err)
++	value, ok := b.Get("/dir", tags)
++	assert.True(t, ok)
++	assert.Equal(t, []byte("red"), value)
++
++	removed, err := b.Remove("/dir", tags)
++	require.NoError(t, err)
++	assert.True(t, removed)
++	removed, err = b.Remove("/dir", tags)
++	require.NoError(t, err)
++	assert.False(t, removed)
++	assert.Equal(t, []string{"com.apple.metadata:kMDItemFinderComment"}, b.List("/dir"))
++}
++
++func TestAttrsClearedFinderInfo(t *testing.T) {
++	a, err := OpenAttrs(filepath.Join(t.TempDir(), "attrs.json"))
++	require.NoError(t, err)
++	label := make([]byte, 32)
++	label[9] = 0x0c
++	require.NoError(t, a.Set("/file", "com.apple.FinderInfo", label))
++	assert.Equal(t, []string{"com.apple.FinderInfo"}, a.List("/file"))
++	require.NoError(t, a.Set("/file", "com.apple.FinderInfo", make([]byte, 32)))
++	assert.Empty(t, a.List("/file"))
++}
++
++func TestAttrsFollowFiles(t *testing.T) {
++	file := filepath.Join(t.TempDir(), "attrs.json")
++	a, err := OpenAttrs(file)
++	require.NoError(t, err)
++	for _, p := range []string{"/dir", "/dir/file", "/dir/sub/file", "/dirx", "/other"} {
++		require.NoError(t, a.Set(p, tags, []byte(p)))
++	}
++
++	require.NoError(t, a.RenameAll("/dir", "/other"))
++	for _, p := range []string{"/dir", "/dir/file", "/dir/sub/file"} {
++		assert.Empty(t, a.List(p), p)
++	}
++	for p, from := range map[string]string{"/other": "/dir", "/other/file": "/dir/file", "/other/sub/file": "/dir/sub/file", "/dirx": "/dirx"} {
++		value, ok := a.Get(p, tags)
++		assert.True(t, ok, p)
++		assert.Equal(t, []byte(from), value, p)
++	}
++
++	require.NoError(t, a.RemoveAll("/other"))
++	assert.Empty(t, a.List("/other"))
++	assert.Empty(t, a.List("/other/sub/file"))
++	assert.Equal(t, []string{tags}, a.List("/dirx"))
++
++	b, err := OpenAttrs(file)
++	require.NoError(t, err)
++	assert.Empty(t, b.List("/other/file"))
++	assert.Equal(t, []string{tags}, b.List("/dirx"))
++}
++
++func TestAttrsAccents(t *testing.T) {
++	a, err := OpenAttrs(filepath.Join(t.TempDir(), "attrs.json"))
++	require.NoError(t, err)
++	decomposed, precomposed := "/Re\u0301sume\u0301", "/R\u00e9sum\u00e9"
++	require.NoError(t, a.Set(decomposed, tags, []byte("red")))
++	value, ok := a.Get(precomposed, tags)
++	assert.True(t, ok)
++	assert.Equal(t, []byte("red"), value)
++	require.NoError(t, a.RenameAll(precomposed, decomposed+"2"))
++	assert.Equal(t, []string{tags}, a.List(precomposed+"2"))
++}
