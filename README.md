@@ -31,6 +31,7 @@ CloudShelf transforme chaque compte en ligne en un lecteur du Finder, comme RaiD
 - **Rapide.** Le moteur rclone fourni avec l'app répartit 16 connexions entre les fichiers lus. Sur Dropbox, une lecture monte à 60 Mo/s, et plusieurs lectures saturent une ligne à 110 Mo/s.
 - **Deux façons de monter.** macFUSE lit directement depuis le réseau, sans rien écrire sur le disque. Le client NFS intégré à macOS ne demande aucune installation.
 - **Un profil par usage.** *Streaming* pour Emby, Plex et Jellyfin, *Documents* pour le travail courant, *Sauvegarde* pour les grosses copies.
+- **Toujours là.** CloudShelf s'ouvre à l'ouverture de session, fenêtre fermée, et monte vos lecteurs. Fermer la fenêtre retire l'icône du Dock mais laisse l'app dans la barre des menus. Elle s'arrête seulement quand vous choisissez Quitter.
 - **Le débit en direct.** Un graphique dans la barre des menus, une page Activité, et un test de débit par lecteur.
 - **Vos envois protégés.** CloudShelf garde dans le cache tout fichier pas encore envoyé, même quand vous videz le cache, et prévient avant de démonter ou de quitter.
 - **Les tags du Finder.** Sur les lecteurs macFUSE, les tags et les couleurs posés dans le Finder restent sur le Mac. `~/Cloud/Tags` les rassemble, un dossier par tag avec un alias par élément, à épingler dans la barre latérale : Spotlight n'indexe pas ces lecteurs, et la section Tags du Finder ne les voit pas.

@@ -126,8 +126,13 @@ struct MenuBarPanel: View {
     /// Brings the main window forward, on a page when given.
     private func open(_ page: AppState.Page?) {
         dismiss()
-        openWindow(id: "main")
-        NSApp.activate()
+        let joinedDock = DockIcon.show()
+        openWindow(id: AppDelegate.mainWindow)
+        if joinedDock {
+            DispatchQueue.main.async { NSApp.activate() }
+        } else {
+            NSApp.activate()
+        }
         if let page { app.page = page }
     }
 

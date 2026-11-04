@@ -11,10 +11,12 @@ struct SettingsPage: View {
             VStack(alignment: .leading, spacing: 0) {
                 SectionTitle(text: "Général", top: 4)
                 SettingsGroup {
-                    SettingsRow("Ouvrir CloudShelf à l'ouverture de session", hint: nil as String?) {
+                    SettingsRow("Ouvrir CloudShelf à l'ouverture de session",
+                                hint: preferences.loginItemProblem ?? (preferences.showMenuBarExtra ? "Fenêtre fermée, dans la barre des menus." : nil)) {
                         SwitchToggle(isOn: $preferences.openAtLogin, label: "Ouvrir à l'ouverture de session")
                     }
-                    SettingsRow("Afficher dans la barre des menus", hint: nil as String?) {
+                    SettingsRow("Afficher dans la barre des menus",
+                                hint: preferences.showMenuBarExtra ? "CloudShelf y reste quand la fenêtre est fermée." : "Fermer la fenêtre quitte CloudShelf.") {
                         SwitchToggle(isOn: $preferences.showMenuBarExtra, label: "Afficher dans la barre des menus")
                     }
                     SettingsRow("Afficher le débit dans la barre des menus", hint: nil as String?) {

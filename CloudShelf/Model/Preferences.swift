@@ -21,14 +21,23 @@ final class Preferences {
     /// Mirrors the login item; turning it on asks macOS to open CloudShelf at login.
     var openAtLogin: Bool {
         didSet {
-            guard openAtLogin != (SMAppService.mainApp.status == .enabled) else { return }
+            let service = SMAppService.mainApp
+            guard openAtLogin != (service.status == .enabled) else { return }
+            loginItemProblem = nil
             do {
-                try openAtLogin ? SMAppService.mainApp.register() : SMAppService.mainApp.unregister()
+                try openAtLogin ? service.register() : service.unregister()
             } catch {
-                openAtLogin = SMAppService.mainApp.status == .enabled
+                loginItemProblem = error.localizedDescription
             }
+            if openAtLogin, service.status == .requiresApproval {
+                loginItemProblem = "En attente de votre accord dans Réglages Système."
+                SMAppService.openSystemSettingsLoginItems()
+            }
+            openAtLogin = service.status == .enabled
         }
     }
+    /// Why the login item is off although it was turned on.
+    private(set) var loginItemProblem: String?
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -48,6 +57,17 @@ final class Preferences {
         showNotesAfterUpdate = defaults.bool(forKey: "showNotesAfterUpdate")
         notesSeenVersion = defaults.string(forKey: "notesSeenVersion")
         openAtLogin = SMAppService.mainApp.status == .enabled
+    }
+
+    /// Turns the login item on at the first launch that offers it, as CloudShelf keeps the drives mounted from the
+    /// menu bar. Only once, so that turning it off, here or in Réglages Système, lasts.
+    func enableOpenAtLoginOnce() {
+        guard !defaults.bool(forKey: "openAtLoginOffered") else { return }
+        defaults.set(true, forKey: "openAtLoginOffered")
+        let service = SMAppService.mainApp
+        guard service.status == .notRegistered || service.status == .notFound else { return }
+        try? service.register()
+        openAtLogin = service.status == .enabled
     }
 
     static let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1"
