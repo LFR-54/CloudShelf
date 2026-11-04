@@ -28,7 +28,7 @@ struct GoogleKeyDialog: View {
                 .padding(16)
                 .card()
                 .padding(.horizontal, 22)
-                Text("Votre navigateur s'ouvre pour autoriser CloudShelf avec cette clé. Un lecteur monté est ensuite remonté.")
+                Text("Votre navigateur s'ouvre pour autoriser Docklume avec cette clé. Un lecteur monté est ensuite remonté.")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.text2)
                     .fixedSize(horizontal: false, vertical: true)

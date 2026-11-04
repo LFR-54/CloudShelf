@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CloudShelf maquette</title>
+<title>Docklume maquette</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
 <style>
 :root {
@@ -467,28 +467,28 @@ input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px;
   <div class="menubar">
     <div class="apps">
       <span class="item"><i class="ti ti-brand-apple"></i></span>
-      <span class="item bold">CloudShelf</span>
+      <span class="item bold">Docklume</span>
       <span class="item">Fichier</span><span class="item">Édition</span><span class="item">Présentation</span><span class="item">Fenêtre</span><span class="item">Aide</span>
     </div>
-    <button class="item" id="menuExtra" aria-label="CloudShelf" aria-haspopup="dialog" aria-expanded="false"><svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.8 10.4v6.3l8.2 4.7 8.2-4.7V7.3L12 2.6 6.6 5.7"/><path d="M8.4 9.8 13.6 6.9v5.6"/></svg><span class="speed" id="menuSpeed"></span></button>
+    <button class="item" id="menuExtra" aria-label="Docklume" aria-haspopup="dialog" aria-expanded="false"><svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.8 10.4v6.3l8.2 4.7 8.2-4.7V7.3L12 2.6 6.6 5.7"/><path d="M8.4 9.8 13.6 6.9v5.6"/></svg><span class="speed" id="menuSpeed"></span></button>
     <span class="item sys"><i class="ti ti-battery-4"></i></span>
     <span class="item sys"><i class="ti ti-wifi"></i></span>
     <span class="item sys"><i class="ti ti-search"></i></span>
     <span class="item sys"><i class="ti ti-adjustments-horizontal"></i></span>
     <span class="item">Dim. 1 nov. 23:40</span>
-    <div class="panel" id="popover" role="dialog" aria-label="CloudShelf"></div>
+    <div class="panel" id="popover" role="dialog" aria-label="Docklume"></div>
   </div>
 
   <div class="scaler" id="scaler">
     <div class="window" id="win">
       <aside class="sidebar">
         <div class="lights"><span></span><span></span><span></span></div>
-        <div class="brand"><span class="app-icon" role="img" aria-label="CloudShelf"></span><div><b>CloudShelf</b><small>Moteur rclone 1.75.2</small></div></div>
+        <div class="brand"><span class="app-icon" role="img" aria-label="Docklume"></span><div><b>Docklume</b><small>Moteur rclone 1.75.2</small></div></div>
         <nav id="nav"></nav>
         <div class="side-foot">
-          <div class="ver"><b>CloudShelf</b><span>Version 0.1</span></div>
+          <div class="ver"><b>Docklume</b><span>Version 0.1</span></div>
           <button class="foot-btn" id="notesBtn" title="Notes de version" aria-label="Notes de version, nouvelle version installée"><i class="ti ti-news"></i><span class="new"></span></button>
-          <button class="foot-btn" id="aboutBtn" title="À propos de CloudShelf" aria-label="À propos de CloudShelf"><i class="ti ti-info-circle"></i></button>
+          <button class="foot-btn" id="aboutBtn" title="À propos de Docklume" aria-label="À propos de Docklume"><i class="ti ti-info-circle"></i></button>
         </div>
       </aside>
       <section class="main">
@@ -1190,7 +1190,7 @@ function renderSettings() {
   $("page").innerHTML = `
     <div class="section-title" style="margin-top:4px">Général</div>
     <div class="group">
-      <div class="row"><div>Ouvrir CloudShelf à l'ouverture de session</div>${sw("", true, "Ouvrir à l'ouverture de session")}</div>
+      <div class="row"><div>Ouvrir Docklume à l'ouverture de session</div>${sw("", true, "Ouvrir à l'ouverture de session")}</div>
       <div class="row"><div>Afficher dans la barre des menus</div>${sw("", true, "Afficher dans la barre des menus")}</div>
       <div class="row"><div>Afficher le débit dans la barre des menus</div>${sw("", true, "Afficher le débit")}</div>
     </div>
@@ -1207,7 +1207,7 @@ function renderSettings() {
     </div>
     <div class="section-title">Cache</div>
     <div class="group">
-      <div class="row"><div>Emplacement<div class="hint mono">~/Library/Caches/CloudShelf</div></div><button class="btn">Modifier…</button></div>
+      <div class="row"><div>Emplacement<div class="hint mono">~/Library/Caches/Docklume</div></div><button class="btn">Modifier…</button></div>
       <div class="row"><div>Espace utilisé<div class="hint">${Math.round(sum("cache"))} Go pour ${drives.length} lecteurs</div></div><button class="btn" id="sClearAll">Vider tout le cache…</button></div>
     </div>
     <div class="section-title">Configuration</div>
@@ -1217,7 +1217,7 @@ function renderSettings() {
     </div>
     <div class="section-title">Moteur</div>
     <div class="group">
-      <div class="row"><div>rclone 1.75.2<div class="hint">Inclus avec CloudShelf</div></div><button class="btn" id="sUpdate">Rechercher une mise à jour</button></div>
+      <div class="row"><div>rclone 1.75.2<div class="hint">Inclus avec Docklume</div></div><button class="btn" id="sUpdate">Rechercher une mise à jour</button></div>
     </div>`;
   $("page").querySelectorAll(".switch").forEach(s => s.onclick = () => s.classList.toggle("on"));
   $("sClearAll").onclick = () => openOverlay({
@@ -1285,7 +1285,7 @@ function renderNotes() {
     <div class="modal-head">
       <button class="close" id="nClose" aria-label="Fermer"><i class="ti ti-x"></i></button>
       <span class="app-icon"></span>
-      <div class="grow"><h3>Notes de version</h3><p>Nouveautés, améliorations et corrections de chaque version de CloudShelf.</p></div>
+      <div class="grow"><h3>Notes de version</h3><p>Nouveautés, améliorations et corrections de chaque version de Docklume.</p></div>
     </div>
     <div class="notes-tools">
       <label class="tsearch"><i class="ti ti-search"></i><input id="nSearch" placeholder="Rechercher une version ou une note" aria-label="Rechercher dans les notes de version"></label>
@@ -1343,14 +1343,14 @@ function renderNotesList() {
   });
 }
 
-const aboutText = "CloudShelf 0.1 (12)\nrclone 1.75.2\nmacFUSE 5.5.0, NFS intégré\nmacOS 27, Apple Silicon";
+const aboutText = "Docklume 0.1 (12)\nrclone 1.75.2\nmacFUSE 5.5.0, NFS intégré\nmacOS 27, Apple Silicon";
 
 function renderAbout() {
   $("modal").className = "modal about";
   $("modal").innerHTML = `
     <button class="close" id="abClose" aria-label="Fermer"><i class="ti ti-x"></i></button>
-    <span class="app-icon" role="img" aria-label="Logo CloudShelf"></span>
-    <h3>CloudShelf</h3>
+    <span class="app-icon" role="img" aria-label="Logo Docklume"></span>
+    <h3>Docklume</h3>
     <div class="about-ver">Version 0.1 (12)</div>
     <div class="about-info">
       <div><span>Moteur</span><b>rclone 1.75.2</b></div>
@@ -1362,7 +1362,7 @@ function renderAbout() {
     <button class="link" id="abCopy"><i class="ti ti-copy"></i>Copier les informations de version</button>`;
   $("abClose").onclick = closeOverlay;
   $("abNotes").onclick = openNotes;
-  $("abUpdate").onclick = () => toast("CloudShelf 0.1 est à jour");
+  $("abUpdate").onclick = () => toast("Docklume 0.1 est à jour");
   $("abCopy").onclick = () => {
     try { navigator.clipboard.writeText(aboutText).catch(() => {}); } catch (e) {}
     toast("Informations de version copiées");
@@ -1393,7 +1393,7 @@ function logLines(d) {
   const mountType = d.method === "macFUSE" ? "cmount" : "nfsmount";
   const lines = [
     ["23:02:41", "INFO", `${remote} Mounting on "${pathOf(d)}" using ${mountType}`],
-    ["23:02:41", "INFO", `${remote} vfs cache: root is "~/Library/Caches/CloudShelf/vfs/${remote.slice(0, -1)}"`],
+    ["23:02:41", "INFO", `${remote} vfs cache: root is "~/Library/Caches/Docklume/vfs/${remote.slice(0, -1)}"`],
     ["23:02:42", "INFO", `${remote} poll-interval is 1m0s`]
   ];
   if (d.p === "dropbox") lines.push(
@@ -1431,7 +1431,7 @@ function renderLog() {
     <div class="modal-foot"><button class="btn lg primary" id="lDone">Fermer</button></div>`;
   $("lLevel").querySelectorAll("button").forEach(b => b.onclick = () => { overlay.level = b.textContent; renderLog(); });
   $("lCopy").onclick = () => toast(`${lines.length} lignes copiées`);
-  $("lFinder").onclick = () => toast("Ouverture de ~/Library/Logs/CloudShelf dans le Finder");
+  $("lFinder").onclick = () => toast("Ouverture de ~/Library/Logs/Docklume dans le Finder");
   [$("lClose"), $("lDone")].forEach(b => b.onclick = closeOverlay);
 }
 
@@ -1449,7 +1449,7 @@ function renderAddDialog() {
     : `<button class="btn" id="dSignIn" style="height:30px">${o.waiting ? `<span class="spin"><i class="ti ti-loader-2"></i></span> En attente du navigateur…` : `Se connecter à ${pv.name}…`}</button>`;
   const fields = {
     oauth: `<div class="frow"><label>Compte</label><div class="ctl">${account}</div></div>
-      ${o.signedIn ? "" : `<div class="frow"><span></span><span class="hint-line">Votre navigateur s'ouvre pour autoriser CloudShelf.</span></div>`}`,
+      ${o.signedIn ? "" : `<div class="frow"><span></span><span class="hint-line">Votre navigateur s'ouvre pour autoriser Docklume.</span></div>`}`,
     login: `
       <div class="frow"><label>Adresse e-mail</label><div class="ctl">${required("email", "l'adresse e-mail", `placeholder="nom@exemple.fr" value="${editing ? esc(editing.account) : ""}"`)}</div></div>
       <div class="frow"><label>Mot de passe</label><div class="ctl">${required("password", "le mot de passe", `type="password" placeholder="${editing ? "Inchangé" : "Mot de passe"}"`)}</div></div>
@@ -1636,7 +1636,7 @@ function renderPopover() {
   panel.innerHTML = `
     <div class="p-head">
       <span class="app-icon"></span>
-      <div class="grow"><b>CloudShelf</b><small>${mounted} montés sur ${plural(drives.length, "lecteur")}</small></div>
+      <div class="grow"><b>Docklume</b><small>${mounted} montés sur ${plural(drives.length, "lecteur")}</small></div>
       <button class="p-btn" data-p="add" aria-label="Ajouter un lecteur"><i class="ti ti-plus"></i></button>
       <button class="p-btn" data-p="settings" aria-label="Paramètres"><i class="ti ti-settings"></i></button>
     </div>
@@ -1655,9 +1655,9 @@ function renderPopover() {
       <div><div class="name">${esc(t.file)}</div><div class="bar"><span style="width:${t.progress * 100}%"></span></div></div>
       <span class="pct">${Math.round(t.progress * 100)} %</span></div>`; }).join("")}` : ""}
     <div class="p-sep"></div>
-    <button class="p-item" data-p="open">Ouvrir CloudShelf</button>
+    <button class="p-item" data-p="open">Ouvrir Docklume</button>
     <div class="p-sep"></div>
-    <button class="p-item" data-p="quit">Quitter CloudShelf<span class="kbd">⌘Q</span></button>`;
+    <button class="p-item" data-p="quit">Quitter Docklume<span class="kbd">⌘Q</span></button>`;
 
   const list = $("pList");
   list.scrollTop = scrollTop;
@@ -1679,10 +1679,10 @@ function renderPopover() {
     else if (act === "quit") {
       const count = drives.filter(d => d.mounted).length;
       openOverlay({
-        type: "alert", title: "Quitter CloudShelf ?",
+        type: "alert", title: "Quitter Docklume ?",
         message: count ? `${count} lecteurs montés seront démontés. Les envois non terminés reprendront au prochain lancement.` : "Aucun lecteur n'est monté.",
         confirm: "Quitter",
-        run: () => { drives.forEach(d => { d.mounted = false; d.read = 0; d.write = 0; }); render(); toast("CloudShelf quitté, lecteurs démontés"); }
+        run: () => { drives.forEach(d => { d.mounted = false; d.read = 0; d.write = 0; }); render(); toast("Docklume quitté, lecteurs démontés"); }
       });
     }
   });
@@ -1761,10 +1761,10 @@ document.querySelectorAll("#appearance button").forEach(b => b.onclick = () => {
   document.querySelectorAll("#appearance button").forEach(x => x.classList.toggle("on", x === b));
   if (b.dataset.theme) document.documentElement.dataset.theme = b.dataset.theme;
   else delete document.documentElement.dataset.theme;
-  try { localStorage.setItem("cloudshelf-theme", b.dataset.theme); } catch (e) {}
+  try { localStorage.setItem("docklume-theme", b.dataset.theme); } catch (e) {}
 });
 try {
-  const saved = localStorage.getItem("cloudshelf-theme");
+  const saved = localStorage.getItem("docklume-theme");
   if (saved) document.querySelector(`#appearance [data-theme="${saved}"]`).click();
 } catch (e) {}
 

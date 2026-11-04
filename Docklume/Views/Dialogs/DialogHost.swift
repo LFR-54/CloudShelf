@@ -139,7 +139,7 @@ struct AboutDialog: View {
                 AppLogo(size: 112, shadowRadius: 5, shadowY: 4)
                     .padding(.top, 10)
                     .padding(.bottom, 14)
-                Text("CloudShelf")
+                Text("Docklume")
                     .font(.system(size: 26, weight: .bold))
                     .tracking(-0.26)
                 Text("Version \(Preferences.appVersion) (\(Preferences.appBuild))")
@@ -195,7 +195,7 @@ struct AboutDialog: View {
     }
 
     private var versionText: String {
-        "CloudShelf \(Preferences.appVersion) (\(Preferences.appBuild))\nrclone \(store.engineVersion ?? "")\n"
+        "Docklume \(Preferences.appVersion) (\(Preferences.appBuild))\nrclone \(store.engineVersion ?? "")\n"
             + (MacFUSE.version.map { "macFUSE \($0), NFS intégré" } ?? "NFS intégré") + "\n\(Self.system), \(Self.architecture)"
     }
 

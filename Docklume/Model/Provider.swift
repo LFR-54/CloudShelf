@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// A storage service CloudShelf can mount, in the order of the add dialog.
+/// A storage service Docklume can mount, in the order of the add dialog.
 struct Provider: Identifiable, Hashable {
     enum Kind {
         /// Authorized in the browser.

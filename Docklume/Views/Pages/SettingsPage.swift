@@ -11,12 +11,12 @@ struct SettingsPage: View {
             VStack(alignment: .leading, spacing: 0) {
                 SectionTitle(text: "Général", top: 4)
                 SettingsGroup {
-                    SettingsRow("Ouvrir CloudShelf à l'ouverture de session",
+                    SettingsRow("Ouvrir Docklume à l'ouverture de session",
                                 hint: preferences.loginItemProblem ?? (preferences.showMenuBarExtra ? "Fenêtre fermée, dans la barre des menus." : nil)) {
                         SwitchToggle(isOn: $preferences.openAtLogin, label: "Ouvrir à l'ouverture de session")
                     }
                     SettingsRow("Afficher dans la barre des menus",
-                                hint: preferences.showMenuBarExtra ? "CloudShelf y reste quand la fenêtre est fermée." : "Fermer la fenêtre quitte CloudShelf.") {
+                                hint: preferences.showMenuBarExtra ? "Docklume y reste quand la fenêtre est fermée." : "Fermer la fenêtre quitte Docklume.") {
                         SwitchToggle(isOn: $preferences.showMenuBarExtra, label: "Afficher dans la barre des menus")
                     }
                     SettingsRow("Afficher le débit dans la barre des menus", hint: nil as String?) {
@@ -90,7 +90,7 @@ struct SettingsPage: View {
 
     private var engineHint: String {
         guard let rclone = Rclone.locate() else { return "Introuvable" }
-        return rclone.isBundled ? "Inclus avec CloudShelf : 16 connexions partagées entre les fichiers lus." : "Installé dans \(Drive.abbreviate(rclone.executable.deletingLastPathComponent().path(percentEncoded: false)))"
+        return rclone.isBundled ? "Inclus avec Docklume : 16 connexions partagées entre les fichiers lus." : "Installé dans \(Drive.abbreviate(rclone.executable.deletingLastPathComponent().path(percentEncoded: false)))"
     }
 
     private func chooseCacheFolder() {
@@ -136,7 +136,7 @@ struct SettingsPage: View {
 
     private func export() {
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = "CloudShelf lecteurs.json"
+        panel.nameFieldStringValue = "Docklume lecteurs.json"
         panel.allowedContentTypes = [.json]
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {

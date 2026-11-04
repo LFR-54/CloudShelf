@@ -13,7 +13,7 @@ struct NotesDialog: View {
         @Bindable var preferences = store.preferences
         ModalSurface(width: 800) {
             VStack(spacing: 0) {
-                ModalHead(title: "Notes de version", subtitle: "Nouveautés, améliorations et corrections de chaque version de CloudShelf.") {
+                ModalHead(title: "Notes de version", subtitle: "Nouveautés, améliorations et corrections de chaque version de Docklume.") {
                     app.overlay = nil
                 }
                 HStack(spacing: 10) {

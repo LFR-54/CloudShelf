@@ -38,9 +38,9 @@ struct MenuBarPanel: View {
                 }
             }
             separator
-            PanelItem(title: "Ouvrir CloudShelf") { open(.drives) }
+            PanelItem(title: "Ouvrir Docklume") { open(.drives) }
             separator
-            PanelItem(title: "Quitter CloudShelf", shortcut: "⌘Q", action: quit)
+            PanelItem(title: "Quitter Docklume", shortcut: "⌘Q", action: quit)
         }
         .font(.system(size: 13))
         .foregroundStyle(Theme.text)
@@ -52,7 +52,7 @@ struct MenuBarPanel: View {
         HStack(spacing: 10) {
             AppLogo(size: 34)
             VStack(alignment: .leading, spacing: 0) {
-                Text("CloudShelf").fontWeight(.semibold).lineBox(13)
+                Text("Docklume").fontWeight(.semibold).lineBox(13)
                 Text("\(Format.plural(store.mountedCount, "monté")) sur \(Format.plural(store.drives.count, "lecteur"))")
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.text2)
@@ -144,7 +144,7 @@ struct MenuBarPanel: View {
         }
         open(nil)
         let pending = store.pendingUploadCount
-        app.confirm("Quitter CloudShelf ?",
+        app.confirm("Quitter Docklume ?",
                     message: "\(Format.plural(count, "lecteur")) monté\(count > 1 ? "s seront démontés" : " sera démonté"). "
                         + (pending > 0 ? DriveStore.unsentMessage(pending) : "Les envois non terminés reprendront au prochain montage."),
                     confirm: "Quitter") {

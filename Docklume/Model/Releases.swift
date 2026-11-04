@@ -39,10 +39,11 @@ struct Release: Identifiable {
     static let all: [Release] = [
         Release(version: "0.2", date: "4 nov. 2026", year: 2026, latest: true, engine: "rclone 1.75.2", notes: [
             .new: [
+                Note(text: "CloudShelf devient Docklume : lecteurs, réglages, caches, envois en attente et tags sont repris au premier lancement", bold: true),
                 Note(text: "Tags et étiquettes de couleur du Finder conservés sur les lecteurs macFUSE, et rassemblés dans ~/Cloud/Tags : un dossier par tag, avec un alias par élément, à épingler dans la barre latérale", bold: true),
-                Note(text: "CloudShelf tourne en permanence : fermer la fenêtre retire l'icône du Dock et laisse l'app dans la barre des menus, lecteurs montés", bold: true),
-                Note(text: "CloudShelf démarre à l'ouverture de session, fenêtre fermée : les lecteurs se montent et l'app attend dans la barre des menus. Réglage activé d'office, à couper dans Paramètres"),
-                Note(text: "Après un plantage ou un arrêt forcé de CloudShelf, les lecteurs restés montés sont repris au lancement"),
+                Note(text: "Docklume tourne en permanence : fermer la fenêtre retire l'icône du Dock et laisse l'app dans la barre des menus, lecteurs montés", bold: true),
+                Note(text: "Docklume démarre à l'ouverture de session, fenêtre fermée : les lecteurs se montent et l'app attend dans la barre des menus. Réglage activé d'office, à couper dans Paramètres"),
+                Note(text: "Après un plantage ou un arrêt forcé de Docklume, les lecteurs restés montés sont repris au lancement"),
                 Note(text: "Google Drive avec votre propre clé Google, saisie ou importée depuis son fichier JSON")
             ],
             .improved: [
@@ -58,7 +59,7 @@ struct Release: Identifiable {
                 Note(text: "Une grosse copie vers un lecteur pouvait remplir le disque du Mac et échouer avec l'erreur -36 : elle ralentit désormais à la vitesse d'envoi", bold: true),
                 Note(text: "Copier un fichier téléchargé ou tagué sur un lecteur échouait avec « Operation not permitted », et pouvait laisser un fichier vide en NFS"),
                 Note(text: "Copier un dossier avec le Finder échouait avec l'erreur -8062 et laissait la copie incomplète"),
-                Note(text: "Fermer la fenêtre quittait CloudShelf, et démontait les lecteurs, avec un utilitaire qui quitte les apps du Dock restées sans fenêtre, comme Vorssaint"),
+                Note(text: "Fermer la fenêtre quittait Docklume, et démontait les lecteurs, avec un utilitaire qui quitte les apps du Dock restées sans fenêtre, comme Vorssaint"),
                 Note(text: "Éjecter un lecteur depuis le Finder le remontait cinq secondes plus tard"),
                 Note(text: "Démonter un lecteur macFUSE pendant qu'un fichier était ouvert pouvait bloquer rclone, et l'app qui lisait le fichier, pendant de longues minutes"),
                 Note(text: "Après avoir quitté l'app, remonter un lecteur macFUSE pouvait échouer avec « Resource busy »"),

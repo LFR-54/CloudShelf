@@ -5,7 +5,7 @@ import Foundation
 /// The Finder lists the items of a tag through Spotlight, which does not index macFUSE volumes: the tags the
 /// bundled rclone keeps (CacheFolder.finderTags) show on the items but not under Tags in the sidebar. An alias on
 /// this disk shows there once Spotlight indexes it, bearing the tag of its folder, and the folders can be pinned
-/// in the sidebar. CloudShelf marks the aliases it makes and only ever removes those.
+/// in the sidebar. Docklume marks the aliases it makes and only ever removes those.
 enum TagShortcuts {
     struct Drive: Sendable {
         let id: String
@@ -18,7 +18,9 @@ enum TagShortcuts {
     static let root = FileManager.default.homeDirectoryForCurrentUser.appending(path: "Cloud/Tags", directoryHint: .isDirectory)
 
     /// The drive, mount point and path an alias leads to, one per line.
-    private static let targetAttribute = "fr.cloudshelf.target"
+    private static let targetAttribute = "fr.docklume.target"
+    /// The same on the aliases made under the app's former name, CloudShelf.
+    private static let formerTargetAttribute = "fr.cloudshelf.target"
     private static let tagsAttribute = "com.apple.metadata:_kMDItemUserTags"
 
     private struct Key: Hashable {
@@ -98,19 +100,27 @@ enum TagShortcuts {
         ((try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast).timeIntervalSince1970
     }
 
-    /// The aliases CloudShelf made, with where they lead.
+    /// The aliases Docklume made, with where they lead.
     private static func aliases(in root: URL) -> [(URL, Key)] {
         let manager = FileManager.default
         let folders = (try? manager.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey])) ?? []
         return folders.flatMap { folder -> [(URL, Key)] in
             let files = (try? manager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
             return files.compactMap { url in
-                guard let value = attribute(targetAttribute, of: url) else { return nil }
+                guard let value = attribute(targetAttribute, of: url) ?? adopt(url) else { return nil }
                 let lines = String(decoding: value, as: UTF8.self).components(separatedBy: "\n")
                 guard lines.count == 3 else { return nil }
                 return (url, Key(drive: lines[0], mountPoint: lines[1], path: lines[2], tag: folder.lastPathComponent))
             }
         }
+    }
+
+    /// Marks an alias that CloudShelf made as Docklume's.
+    private static func adopt(_ url: URL) -> Data? {
+        guard let value = attribute(formerTargetAttribute, of: url) else { return nil }
+        setAttribute(targetAttribute, value, on: url)
+        removexattr(url.path, formerTargetAttribute, XATTR_NOFOLLOW)
+        return value
     }
 
     /// An alias needs its item to exist, so it is made only while the drive is mounted.

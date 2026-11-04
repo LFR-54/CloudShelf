@@ -8,7 +8,7 @@ struct RemoteControl: Sendable {
 
     init() throws {
         port = try Self.freePort()
-        user = "cloudshelf"
+        user = "docklume"
         password = UUID().uuidString
     }
 

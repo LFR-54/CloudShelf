@@ -3,18 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Confidentialité · CloudShelf</title>
-  <meta name="description" content="Règles de confidentialité de CloudShelf : aucune donnée collectée, identifiants stockés sur le Mac de l'utilisateur.">
+  <title>Confidentialité · Docklume</title>
+  <meta name="description" content="Règles de confidentialité de Docklume : aucune donnée collectée, identifiants stockés sur le Mac de l'utilisateur.">
   <link rel="icon" href="images/favicon.png">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="top">
     <div class="wrap">
-      <a class="brand" href="./"><img src="images/icon.png" alt="">CloudShelf</a>
+      <a class="brand" href="./"><img src="images/icon.png" alt="">Docklume</a>
       <nav>
         <a href="./">Accueil</a>
-        <a href="https://github.com/LFR-54/CloudShelf">GitHub</a>
+        <a href="https://github.com/LFR-54/Docklume">GitHub</a>
       </nav>
     </div>
   </header>
@@ -24,48 +24,48 @@
       <h1>Règles de confidentialité</h1>
       <p class="date">En vigueur depuis le 3 novembre 2026</p>
 
-      <p>CloudShelf est une application macOS qui monte des stockages en ligne (Dropbox, Google Drive, OneDrive, S3, NAS…) comme des disques dans le Finder, à l'aide du logiciel libre rclone. Elle fonctionne entièrement sur votre Mac.</p>
+      <p>Docklume est une application macOS qui monte des stockages en ligne (Dropbox, Google Drive, OneDrive, S3, NAS…) comme des disques dans le Finder, à l'aide du logiciel libre rclone. Elle fonctionne entièrement sur votre Mac.</p>
 
-      <h2>Ce que CloudShelf ne fait pas</h2>
+      <h2>Ce que Docklume ne fait pas</h2>
       <ul>
-        <li>CloudShelf ne collecte aucune donnée personnelle et n'a aucun serveur.</li>
+        <li>Docklume ne collecte aucune donnée personnelle et n'a aucun serveur.</li>
         <li>Aucune donnée n'est transmise à l'auteur de l'application ni à des tiers.</li>
         <li>L'application ne contient ni télémétrie, ni statistiques d'usage, ni publicité.</li>
       </ul>
 
       <h2>Données des services connectés</h2>
-      <p>Quand vous connectez un service, par exemple Google Drive, vous autorisez CloudShelf dans votre navigateur. Le service remet alors un jeton d'accès, que rclone enregistre dans son fichier de configuration sur votre Mac (<code>~/.config/rclone/rclone.conf</code>).</p>
+      <p>Quand vous connectez un service, par exemple Google Drive, vous autorisez Docklume dans votre navigateur. Le service remet alors un jeton d'accès, que rclone enregistre dans son fichier de configuration sur votre Mac (<code>~/.config/rclone/rclone.conf</code>).</p>
       <p>Ce jeton sert uniquement à :</p>
       <ul>
         <li>afficher, lire et, si vous désactivez la lecture seule, créer, modifier et supprimer vos fichiers, à votre demande, à travers le lecteur monté ;</li>
         <li>afficher l'adresse e-mail du compte et l'espace disponible dans l'application.</li>
       </ul>
-      <p>Les fichiers lus ou en attente d'envoi peuvent être conservés temporairement dans un cache sur votre Mac (<code>~/Library/Caches/CloudShelf</code>). Vous pouvez le vider à tout moment depuis l'application. Les échanges ont lieu directement entre votre Mac et les serveurs du service, en HTTPS.</p>
+      <p>Les fichiers lus ou en attente d'envoi peuvent être conservés temporairement dans un cache sur votre Mac (<code>~/Library/Caches/Docklume</code>). Vous pouvez le vider à tout moment depuis l'application. Les échanges ont lieu directement entre votre Mac et les serveurs du service, en HTTPS.</p>
 
       <h2>Données utilisateur Google</h2>
       <p>L'utilisation et le transfert vers toute autre application des informations reçues des API Google respectent le <a href="https://developers.google.com/terms/api-services-user-data-policy">Règlement sur les données utilisateur des services d'API Google</a>, y compris les exigences d'utilisation limitée. Ces informations ne sont ni vendues, ni utilisées à des fins publicitaires, ni lues par une personne.</p>
 
       <h2>Supprimer vos données</h2>
       <ul>
-        <li>Supprimer un lecteur dans CloudShelf efface son cache et, s'il a été créé dans l'application, sa configuration rclone.</li>
+        <li>Supprimer un lecteur dans Docklume efface son cache et, s'il a été créé dans l'application, sa configuration rclone.</li>
         <li>Vous pouvez retirer l'accès à tout moment depuis votre compte, par exemple sur <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a> pour Google.</li>
       </ul>
 
       <h2>Contact</h2>
-      <p>Pour toute question, ouvrez un ticket sur la page <a href="https://github.com/LFR-54/CloudShelf/issues">GitHub du projet</a>.</p>
+      <p>Pour toute question, ouvrez un ticket sur la page <a href="https://github.com/LFR-54/Docklume/issues">GitHub du projet</a>.</p>
 
       <hr>
 
       <h1 lang="en">Privacy policy</h1>
       <div lang="en">
         <p class="date">Effective November 3, 2026</p>
-        <p>CloudShelf is a macOS app that mounts online storage as Finder drives using the open-source rclone. It runs entirely on your Mac.</p>
+        <p>Docklume is a macOS app that mounts online storage as Finder drives using the open-source rclone. It runs entirely on your Mac.</p>
         <ul>
-          <li>CloudShelf collects no personal data and has no server. Nothing is sent to the author or to third parties. There is no telemetry, analytics or advertising.</li>
+          <li>Docklume collects no personal data and has no server. Nothing is sent to the author or to third parties. There is no telemetry, analytics or advertising.</li>
           <li>When you connect a service such as Google Drive, the access token it issues is stored by rclone on your Mac only. It is used solely to list, read and, when you allow writing, modify your files at your request, and to show the account's email address and free space.</li>
-          <li>Files may be cached temporarily on your Mac in <code>~/Library/Caches/CloudShelf</code>. Data travels directly between your Mac and the service over HTTPS.</li>
-          <li>CloudShelf's use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</li>
-          <li>Revoke access at any time from your account settings, for example <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>. Questions: <a href="https://github.com/LFR-54/CloudShelf/issues">GitHub issues</a>.</li>
+          <li>Files may be cached temporarily on your Mac in <code>~/Library/Caches/Docklume</code>. Data travels directly between your Mac and the service over HTTPS.</li>
+          <li>Docklume's use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</li>
+          <li>Revoke access at any time from your account settings, for example <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>. Questions: <a href="https://github.com/LFR-54/Docklume/issues">GitHub issues</a>.</li>
         </ul>
       </div>
     </article>
@@ -73,10 +73,10 @@
 
   <footer>
     <div class="wrap">
-      <span>CloudShelf · licence MIT</span>
+      <span>Docklume · licence MIT</span>
       <nav>
         <a href="./">Accueil</a>
-        <a href="https://github.com/LFR-54/CloudShelf">Code source</a>
+        <a href="https://github.com/LFR-54/Docklume">Code source</a>
       </nav>
     </div>
   </footer>

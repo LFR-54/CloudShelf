@@ -18,7 +18,7 @@ final class Preferences {
     /// The last version whose notes were opened, which clears the dot on the notes button.
     var notesSeenVersion: String? { didSet { defaults.set(notesSeenVersion, forKey: "notesSeenVersion") } }
 
-    /// Mirrors the login item; turning it on asks macOS to open CloudShelf at login.
+    /// Mirrors the login item; turning it on asks macOS to open Docklume at login.
     var openAtLogin: Bool {
         didSet {
             let service = SMAppService.mainApp
@@ -59,7 +59,7 @@ final class Preferences {
         openAtLogin = SMAppService.mainApp.status == .enabled
     }
 
-    /// Turns the login item on at the first launch that offers it, as CloudShelf keeps the drives mounted from the
+    /// Turns the login item on at the first launch that offers it, as Docklume keeps the drives mounted from the
     /// menu bar. Only once, so that turning it off, here or in Réglages Système, lasts.
     func enableOpenAtLoginOnce() {
         guard !defaults.bool(forKey: "openAtLoginOffered") else { return }

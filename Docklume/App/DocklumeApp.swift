@@ -1,11 +1,11 @@
 import SwiftUI
 
 @main
-struct CloudShelfApp: App {
+struct DocklumeApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
-        Window("CloudShelf", id: AppDelegate.mainWindow) {
+        Window("Docklume", id: AppDelegate.mainWindow) {
             MainWindow()
                 .environment(delegate.store)
                 .environment(delegate.app)
@@ -16,7 +16,7 @@ struct CloudShelfApp: App {
         .defaultSize(width: 1120, height: 760)
         .commands {
             CommandGroup(replacing: .appInfo) {
-                Button("À propos de CloudShelf") { delegate.app.overlay = .about }
+                Button("À propos de Docklume") { delegate.app.overlay = .about }
             }
             CommandGroup(replacing: .newItem) {
                 Button("Ajouter un lecteur…") { delegate.app.overlay = .add(provider: "webdav") }
@@ -56,15 +56,25 @@ private struct MenuBarLabel: View {
 
 /// Owns the drives, which load and mount at launch whether the window opens or not.
 ///
-/// CloudShelf is declared a menu bar app (LSUIElement) and joins the Dock while its window is open. Closed, the
+/// Docklume is declared a menu bar app (LSUIElement) and joins the Dock while its window is open. Closed, the
 /// window leaves it in the menu bar: utilities that quit the Dock apps left without a window, such as Vorssaint,
 /// would otherwise stop it and unmount the drives.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     static let mainWindow = "main"
 
-    let store = DriveStore()
+    let store: DriveStore
     let app = AppState()
+    /// CloudShelf, the app's former name, still runs: Docklume then quits without touching its drives.
+    private let formerNameRunning: Bool
+
+    override init() {
+        formerNameRunning = FormerName.isRunning
+        // Before the store reads the settings and the drives.
+        if !formerNameRunning { FormerName.migrate() }
+        store = DriveStore()
+        super.init()
+    }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         // Before the app is activated, so that it gets the menu bar.
@@ -72,6 +82,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if formerNameRunning {
+            let alert = NSAlert()
+            alert.messageText = "CloudShelf est encore ouvert"
+            alert.informativeText = "Docklume remplace CloudShelf et reprend ses lecteurs, ses réglages et ses caches. Quittez CloudShelf, puis rouvrez Docklume."
+            alert.addButton(withTitle: "Quitter Docklume")
+            NSApp.activate()
+            alert.runModal()
+            NSApp.terminate(nil)
+            return
+        }
         watchMainWindow()
         // At login the window stays closed, the drives being in the menu bar. SwiftUI has ordered it in but not
         // drawn it yet.
@@ -111,7 +131,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.async { NSApp.activate() }
     }
 
-    /// Opening CloudShelf from the Finder, Spotlight or the Dock while it runs in the menu bar: SwiftUI opens the
+    /// Opening Docklume from the Finder, Spotlight or the Dock while it runs in the menu bar: SwiftUI opens the
     /// window once this returns.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if DockIcon.show() { DispatchQueue.main.async { NSApp.activate() } }
@@ -129,7 +149,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // ⌘Q skips the panel's confirmation: files still being uploaded would only leave at the next mount.
         if store.pendingUploadCount > 0, !app.quitConfirmed {
             let alert = NSAlert()
-            alert.messageText = "Quitter CloudShelf ?"
+            alert.messageText = "Quitter Docklume ?"
             alert.informativeText = DriveStore.unsentMessage(store.pendingUploadCount)
             alert.addButton(withTitle: "Quitter")
             alert.addButton(withTitle: "Annuler")

@@ -7,8 +7,8 @@ final class DriveStore {
     private(set) var drives: [Drive] = []
     private(set) var engineVersion: String?
 
-    /// The rclone release, without the suffix of the build bundled with CloudShelf.
-    var engineRelease: String? { engineVersion?.components(separatedBy: "-cloudshelf").first }
+    /// The rclone release, without the suffix of the build bundled with Docklume.
+    var engineRelease: String? { engineVersion?.components(separatedBy: "-docklume").first }
     private(set) var loadError: String?
     private(set) var isLoading = false
     private(set) var remotes: [Remote] = []
@@ -32,7 +32,7 @@ final class DriveStore {
     @ObservationIgnored private let catalog: URL?
 
     static let catalogURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        .appending(path: "CloudShelf/drives.json")
+        .appending(path: "Docklume/drives.json")
 
     init(preferences: Preferences = Preferences(), catalog: URL? = DriveStore.catalogURL) {
         self.preferences = preferences
@@ -259,7 +259,7 @@ final class DriveStore {
             watch(drive, session)
             if Mounts.same(orphan.mountPoint, drive.mountPoint), Mounts.isMounted(drive.mountPoint) {
                 drive.state = .mounted
-                drive.notice = "Montage repris : CloudShelf s'était arrêté sans démonter ce lecteur."
+                drive.notice = "Montage repris : Docklume s'était arrêté sans démonter ce lecteur."
             } else {
                 drive.state = .unmounting
                 stop(drive, session)
@@ -267,7 +267,7 @@ final class DriveStore {
         }
     }
 
-    /// The Finder and Disk Utility announce an eject; the unmounts of CloudShelf do not.
+    /// The Finder and Disk Utility announce an eject; the unmounts of Docklume do not.
     private func watchEjections() {
         guard ejectObserver == nil else { return }
         ejectObserver = NSWorkspace.shared.notificationCenter.addObserver(
@@ -502,7 +502,7 @@ final class DriveStore {
     /// What deleting a drive does to rclone.conf.
     func deletionMessage(_ drive: Drive) -> String {
         !removesRemote(drive)
-            ? "Le volume est démonté et le lecteur retiré de CloudShelf. Le remote « \(drive.remote) » reste dans rclone.conf. Les fichiers dans le cloud ne sont pas touchés."
+            ? "Le volume est démonté et le lecteur retiré de Docklume. Le remote « \(drive.remote) » reste dans rclone.conf. Les fichiers dans le cloud ne sont pas touchés."
             : "Le volume est démonté et sa configuration supprimée. Les fichiers dans le cloud ne sont pas touchés."
     }
 
@@ -538,7 +538,7 @@ final class DriveStore {
         remotes = (try? await rclone?.remotes()) ?? remotes
     }
 
-    /// A remote CloudShelf created goes with the last drive using it; a duplicate shares it.
+    /// A remote Docklume created goes with the last drive using it; a duplicate shares it.
     private func removesRemote(_ drive: Drive) -> Bool {
         !drive.record.createdRemotes.isEmpty && !drives.contains { $0 !== drive && $0.remote == drive.remote }
     }
@@ -698,7 +698,7 @@ final class DriveStore {
     /// Tries the connection in a throwaway config, so nothing reaches rclone.conf before Connecter.
     func testConnection(_ draft: ConnectionDraft, editing: Drive?) async throws -> String {
         guard let rclone else { throw RcloneError.notFound }
-        let config = FileManager.default.temporaryDirectory.appending(path: "cloudshelf-test-\(UUID().uuidString).conf")
+        let config = FileManager.default.temporaryDirectory.appending(path: "docklume-test-\(UUID().uuidString).conf")
         defer { try? FileManager.default.removeItem(at: config) }
         var parameters = draft.parameters
         if let editing, let stored = try? await rclone.dump()[baseRemote(editing)] {
@@ -783,7 +783,7 @@ final class DriveStore {
         let release = current.split(separator: "-").first.map(String.init) ?? current
         if latest.isEmpty || latest == release { return "rclone \(release) est à jour" }
         return rclone.isBundled
-            ? "rclone \(latest) est sorti, il arrivera avec une prochaine version de CloudShelf (inclus : \(release))"
+            ? "rclone \(latest) est sorti, il arrivera avec une prochaine version de Docklume (inclus : \(release))"
             : "rclone \(latest) est disponible (installé : \(current))"
     }
 

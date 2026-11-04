@@ -149,7 +149,7 @@ struct ConnectionDialog: View {
                 }
             }
             if draft.token == nil && editing == nil {
-                Text("Votre navigateur s'ouvre pour autoriser CloudShelf.")
+                Text("Votre navigateur s'ouvre pour autoriser Docklume.")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.text2)
                     .padding(.leading, 142)

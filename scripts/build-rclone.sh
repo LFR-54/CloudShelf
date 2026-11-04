@@ -1,9 +1,9 @@
 #!/bin/zsh
-# Builds the rclone bundled with CloudShelf: the release below with the patches in rclone-patches,
+# Builds the rclone bundled with Docklume: the release below with the patches in rclone-patches,
 # for Apple Silicon, with macFUSE support. Needs Go (~/.local/go or on the PATH) and macFUSE installed.
 set -euo pipefail
 VERSION=v1.75.2
-BUILD=cloudshelf.8
+BUILD=docklume.8
 ROOT=${0:A:h:h}
 SRC=$ROOT/rclone
 export PATH=$HOME/.local/go/bin:$PATH

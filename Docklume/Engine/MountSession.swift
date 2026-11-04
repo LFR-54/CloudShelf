@@ -6,10 +6,10 @@ final class MountSession {
     let mountPoint: URL
     /// Where this run starts in the log, which keeps the lines of earlier runs.
     let logOffset: UInt64
-    /// Called once, when rclone has exited or CloudShelf has given up on it, with the exit status when known.
+    /// Called once, when rclone has exited or Docklume has given up on it, with the exit status when known.
     var onExit: ((Int32?) -> Void)?
 
-    /// The process CloudShelf started; nil for one taken over from a previous run, whose status cannot be known.
+    /// The process Docklume started; nil for one taken over from a previous run, whose status cannot be known.
     private let process: Process?
     private var pid: pid_t = 0
     private var exitSource: DispatchSourceProcess?
@@ -42,7 +42,7 @@ final class MountSession {
         pid = process.processIdentifier
     }
 
-    /// Takes over an rclone mount that a previous run of CloudShelf left running.
+    /// Takes over an rclone mount that a previous run of Docklume left running.
     init(adopting orphan: OrphanMount, logFile: URL) {
         mountPoint = orphan.mountPoint
         logOffset = RcloneLog.size(of: logFile)
@@ -139,7 +139,7 @@ final class MountSession {
     }
 }
 
-/// An rclone mount still running after the CloudShelf that started it quit without stopping it, found by its
+/// An rclone mount still running after the Docklume that started it quit without stopping it, found by its
 /// command line and environment, which carry the address and password of its rc server.
 struct OrphanMount: Sendable {
     let pid: pid_t
@@ -151,7 +151,7 @@ struct OrphanMount: Sendable {
     let user: String
     let password: String
 
-    /// The orphaned rclone mounts of this user; their parent is launchd once CloudShelf has gone.
+    /// The orphaned rclone mounts of this user; their parent is launchd once Docklume has gone.
     static func all() -> [OrphanMount] {
         let count = proc_listallpids(nil, 0)
         guard count > 0 else { return [] }

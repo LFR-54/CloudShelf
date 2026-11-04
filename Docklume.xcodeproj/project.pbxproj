@@ -7,13 +7,13 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		C5000000000000000000A001 /* CloudShelf.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CloudShelf.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C5000000000000000000A001 /* Docklume.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Docklume.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		C5000000000000000000A002 /* CloudShelf */ = {
+		C5000000000000000000A002 /* Docklume */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = CloudShelf;
+			path = Docklume;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -32,7 +32,7 @@
 		C5000000000000000000A004 = {
 			isa = PBXGroup;
 			children = (
-				C5000000000000000000A002 /* CloudShelf */,
+				C5000000000000000000A002 /* Docklume */,
 				C5000000000000000000A005 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -40,7 +40,7 @@
 		C5000000000000000000A005 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				C5000000000000000000A001 /* CloudShelf.app */,
+				C5000000000000000000A001 /* Docklume.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -48,9 +48,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		C5000000000000000000A006 /* CloudShelf */ = {
+		C5000000000000000000A006 /* Docklume */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = C5000000000000000000A007 /* Build configuration list for PBXNativeTarget "CloudShelf" */;
+			buildConfigurationList = C5000000000000000000A007 /* Build configuration list for PBXNativeTarget "Docklume" */;
 			buildPhases = (
 				C5000000000000000000A008 /* Sources */,
 				C5000000000000000000A003 /* Frameworks */,
@@ -62,13 +62,13 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				C5000000000000000000A002 /* CloudShelf */,
+				C5000000000000000000A002 /* Docklume */,
 			);
-			name = CloudShelf;
+			name = Docklume;
 			packageProductDependencies = (
 			);
-			productName = CloudShelf;
-			productReference = C5000000000000000000A001 /* CloudShelf.app */;
+			productName = Docklume;
+			productReference = C5000000000000000000A001 /* Docklume.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -86,7 +86,7 @@
 					};
 				};
 			};
-			buildConfigurationList = C5000000000000000000A00B /* Build configuration list for PBXProject "CloudShelf" */;
+			buildConfigurationList = C5000000000000000000A00B /* Build configuration list for PBXProject "Docklume" */;
 			developmentRegion = fr;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -100,7 +100,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				C5000000000000000000A006 /* CloudShelf */,
+				C5000000000000000000A006 /* Docklume */,
 			);
 		};
 /* End PBXProject section */
@@ -203,15 +203,15 @@
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "CloudShelf-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = CloudShelf;
+				INFOPLIST_FILE = "Docklume-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Docklume;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 0.2;
-				PRODUCT_BUNDLE_IDENTIFIER = fr.cloudshelf.CloudShelf;
+				PRODUCT_BUNDLE_IDENTIFIER = fr.docklume.Docklume;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
@@ -229,15 +229,15 @@
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "CloudShelf-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = CloudShelf;
+				INFOPLIST_FILE = "Docklume-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Docklume;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 0.2;
-				PRODUCT_BUNDLE_IDENTIFIER = fr.cloudshelf.CloudShelf;
+				PRODUCT_BUNDLE_IDENTIFIER = fr.docklume.Docklume;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
@@ -247,7 +247,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		C5000000000000000000A007 /* Build configuration list for PBXNativeTarget "CloudShelf" */ = {
+		C5000000000000000000A007 /* Build configuration list for PBXNativeTarget "Docklume" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				C5000000000000000000A00E /* Debug */,
@@ -256,7 +256,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		C5000000000000000000A00B /* Build configuration list for PBXProject "CloudShelf" */ = {
+		C5000000000000000000A00B /* Build configuration list for PBXProject "Docklume" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				C5000000000000000000A00C /* Debug */,

@@ -59,7 +59,7 @@ struct DriveSettings: Codable, Equatable {
     var lastRefresh: Date?
 }
 
-/// What CloudShelf stores about a drive; the rclone remote holds the connection.
+/// What Docklume stores about a drive; the rclone remote holds the connection.
 struct DriveRecord: Codable, Identifiable, Equatable {
     var id = UUID().uuidString
     var remote: String
@@ -68,7 +68,7 @@ struct DriveRecord: Codable, Identifiable, Equatable {
     var name: String
     var provider: String
     var account: String?
-    /// Remotes written to rclone.conf by CloudShelf, removed with the drive.
+    /// Remotes written to rclone.conf by Docklume, removed with the drive.
     var createdRemotes: [String] = []
     var settings = DriveSettings()
 }
@@ -140,11 +140,10 @@ final class Drive: Identifiable {
     /// The mount point with the home folder written as ~.
     var displayPath: String { Self.abbreviate(mountPoint.path(percentEncoded: false)) }
 
-    var logFile: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appending(path: "Library/Logs/CloudShelf", directoryHint: .isDirectory)
-            .appending(path: "\(id).log")
-    }
+    static let logFolder = FileManager.default.homeDirectoryForCurrentUser
+        .appending(path: "Library/Logs/Docklume", directoryHint: .isDirectory)
+
+    var logFile: URL { Self.logFolder.appending(path: "\(id).log") }
 
     var errorMessage: String? {
         if case .failed(let message) = state { message } else { nil }
@@ -173,7 +172,7 @@ final class Drive: Identifiable {
 /// Over macFUSE, reads straight from the network play as smoothly as NFS from its cache, with nothing written to disk.
 enum MountOptions {
     static let defaultCacheBase = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        .appending(path: "CloudShelf", directoryHint: .isDirectory)
+        .appending(path: "Docklume", directoryHint: .isDirectory)
 
     /// Each drive has its own cache folder, so two drives on one remote never share it.
     @MainActor

@@ -62,7 +62,7 @@ private struct WindowChrome: NSViewRepresentable {
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             guard let window, window.styleMask.contains(.titled), window.toolbar == nil else { return }
-            window.toolbar = NSToolbar(identifier: "CloudShelf")
+            window.toolbar = NSToolbar(identifier: "Docklume")
             window.toolbarStyle = .unified
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
@@ -97,7 +97,7 @@ struct Sidebar: View {
             HStack(spacing: 12) {
                 AppLogo(size: 58)
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("CloudShelf")
+                    Text("Docklume")
                         .font(.system(size: 21, weight: .bold))
                         .tracking(-0.21)
                     Text("Moteur rclone \(store.engineRelease ?? "…")")
@@ -144,7 +144,7 @@ struct Sidebar: View {
     private var footer: some View {
         HStack(spacing: 6) {
             VStack(alignment: .leading, spacing: 0) {
-                Text("CloudShelf")
+                Text("Docklume")
                     .font(.system(size: 15, weight: .semibold))
                     .lineBox(15, 1.35)
                 Text("Version \(Preferences.appVersion)")
@@ -156,7 +156,7 @@ struct Sidebar: View {
             FootButton(symbol: "newspaper", label: "Notes de version", showsDot: store.preferences.notesSeenVersion != Preferences.appVersion) {
                 app.overlay = .notes
             }
-            FootButton(symbol: "info.circle", label: "À propos de CloudShelf", showsDot: false) {
+            FootButton(symbol: "info.circle", label: "À propos de Docklume", showsDot: false) {
                 app.overlay = .about
             }
         }

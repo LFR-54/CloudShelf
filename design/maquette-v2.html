@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CloudShelf maquette</title>
+<title>Docklume maquette</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
 <style>
 :root {
@@ -244,7 +244,7 @@ button { font: inherit; color: inherit; }
 <body>
 <div class="stage">
   <div class="menubar">
-    <button class="item" id="menuExtra" aria-label="Lecteurs CloudShelf"><i class="ti ti-cloud"></i><span class="speed" id="menuSpeed"></span></button>
+    <button class="item" id="menuExtra" aria-label="Lecteurs Docklume"><i class="ti ti-cloud"></i><span class="speed" id="menuSpeed"></span></button>
     <span class="item">Dim. 1 nov. 22:30</span>
     <div class="popover" id="popover"></div>
   </div>
@@ -538,12 +538,12 @@ function renderPopover() {
   const total = drives.reduce((s, d) => s + d.read + d.write, 0);
   $("menuSpeed").textContent = total > 0 ? fmtSpeed(total) : "";
   $("popover").innerHTML = `
-    <div class="pop-head"><b>CloudShelf</b><span class="meta">${fmtSpeed(total)}</span></div>
+    <div class="pop-head"><b>Docklume</b><span class="meta">${fmtSpeed(total)}</span></div>
     ${drives.map(d => `<div class="pop-row">${tile(d.p)}<span class="name">${d.name}</span>
       <span class="meta">${d.mounted ? fmtSpeed(d.read + d.write) : "Non monté"}</span>
       <button class="switch ${d.mounted ? "on" : ""}" data-id="${d.id}" aria-label="Monter ${d.name}"></button></div>`).join("")}
     <div class="pop-sep"></div>
-    <button class="pop-link">Ouvrir CloudShelf</button>
+    <button class="pop-link">Ouvrir Docklume</button>
     <button class="pop-link">Réglages…</button>`;
   $("popover").querySelectorAll(".switch").forEach(s => s.onclick = e => {
     e.stopPropagation();
@@ -631,10 +631,10 @@ document.querySelectorAll("#appearance button").forEach(b => b.onclick = () => {
   document.querySelectorAll("#appearance button").forEach(x => x.classList.toggle("on", x === b));
   if (b.dataset.theme) document.documentElement.dataset.theme = b.dataset.theme;
   else delete document.documentElement.dataset.theme;
-  try { localStorage.setItem("cloudshelf-theme", b.dataset.theme); } catch (e) {}
+  try { localStorage.setItem("docklume-theme", b.dataset.theme); } catch (e) {}
 });
 try {
-  const saved = localStorage.getItem("cloudshelf-theme");
+  const saved = localStorage.getItem("docklume-theme");
   if (saved) document.querySelector(`#appearance [data-theme="${saved}"]`).click();
 } catch (e) {}
 
