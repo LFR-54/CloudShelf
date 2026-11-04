@@ -22,8 +22,9 @@ enum Theme {
     static let window = Color(0xF0F0F4, dark: 0x1E1E20)
     static let sidebar = Color(0xE4E4EA, 0.72, dark: 0x2E2E32, 0.66)
     static let card = Color(0xFFFFFF, dark: 0xFFFFFF, 0.055)
-    /// Behind a service's logo: white, toned down in dark mode where pure white outshines the rest of the window.
-    static let logoTile = Color(0xFFFFFF, dark: 0xD8D8DA)
+    /// Behind a service's logo: white, a shade softer in dark mode where pure white glares. Any greyer and the
+    /// logos look faded.
+    static let logoTile = Color(0xFFFFFF, dark: 0xF5F5F7)
     static let cardBorder = Color(0x000000, 0.07, dark: 0xFFFFFF, 0.07)
     static let separator = Color(0x000000, 0.08, dark: 0xFFFFFF, 0.09)
     static let grid = Color(0x000000, 0.06, dark: 0xFFFFFF, 0.07)

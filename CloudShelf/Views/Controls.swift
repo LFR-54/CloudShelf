@@ -503,6 +503,10 @@ struct ProviderTile: View {
                         Image(name).resizable().scaledToFit()
                             .frame(width: size * 0.7, height: size * 0.7)
                     }
+            case .appIcon(let name):
+                Image(name).resizable().scaledToFill()
+                    .clipShape(shape)
+                    .hairlineBorder(shape, .white.opacity(0.16))
             case .icon(let name):
                 shape.fill(provider.color)
                     .hairlineBorder(shape, .white.opacity(0.16))

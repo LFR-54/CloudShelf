@@ -15,6 +15,8 @@ struct Provider: Identifiable, Hashable {
     enum Glyph: Hashable {
         /// The service's logo in its own colours, drawn at 70 % of a white tile.
         case brand(String)
+        /// The service's app icon, which fills the tile: kDrive's pale folders only read on its own blue.
+        case appIcon(String)
         /// An outline icon, drawn at 54 % of the tile.
         case icon(String)
     }
@@ -47,7 +49,7 @@ struct Provider: Identifiable, Hashable {
                  kind: .login, type: "mega", web: URL(string: "https://mega.nz")),
         Provider(id: "proton", name: "Proton Drive", subtitle: "Chiffré de bout en bout", color: Color(hex: 0x6D4AFF), glyph: .brand("brand-protondrive"),
                  kind: .login, type: "protondrive", web: URL(string: "https://drive.proton.me")),
-        Provider(id: "kdrive", name: "kDrive", subtitle: "Infomaniak", color: Color(hex: 0x0098FF), glyph: .brand("brand-kdrive"),
+        Provider(id: "kdrive", name: "kDrive", subtitle: "Infomaniak", color: Color(hex: 0x5C89F7), glyph: .appIcon("brand-kdrive"),
                  kind: .server, type: "webdav", vendor: "other", port: 443, hostPlaceholder: "https://123456.connect.kdrive.infomaniak.com",
                  web: URL(string: "https://kdrive.infomaniak.com")),
         Provider(id: "s3", name: "Compatible S3", subtitle: "AWS, Backblaze, Wasabi, R2", color: Color(hex: 0xF08C00), glyph: .icon("tile-bucket"),
